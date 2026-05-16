@@ -1579,7 +1579,7 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt, onAdvanceDeposit, on
     const GroupIcon = activeGroup.icon;
     return (
       <div className="min-h-full flex flex-col" style={bgStyle}>
-        <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        <div className="relative dt-safe-top px-5 pt-3 pb-5 text-white"
           style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
           <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
           <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
@@ -1598,7 +1598,7 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt, onAdvanceDeposit, on
           </div>
         </div>
 
-        <div className="px-5 -mt-12 relative z-20">
+        <div className="px-5 pt-4">
           <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] overflow-hidden">
             {activeGroup.services.map((svc, i) => {
               const SvcIcon = svc.icon;
@@ -1629,7 +1629,7 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt, onAdvanceDeposit, on
     <div className="min-h-full flex flex-col" style={bgStyle}>
 
       {/* Hero header */}
-      <div className="relative dt-safe-top px-5 pt-3 pb-5 text-white"
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
         style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
         <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
         <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
@@ -1644,16 +1644,16 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt, onAdvanceDeposit, on
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="px-5 pt-4">
-        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_4px_12px_-6px_rgba(14,27,61,0.12)] p-2 flex items-center">
+      {/* Floating search */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
           <Search size={16} className="ml-2 mr-1 text-[#99A1AF] shrink-0" />
           <span className="text-[13.5px] text-[#99A1AF] py-2.5 pl-1">Search services...</span>
         </div>
       </div>
 
       {/* Group cards grid */}
-      <div className="px-5 pt-4 pb-24 grid grid-cols-2 gap-3">
+      <div className="px-5 pt-5 pb-24 grid grid-cols-2 gap-3">
         {groups.map(group => {
           const GroupIcon = group.icon;
           return (
