@@ -1,36 +1,52 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, Eye, EyeOff, Fingerprint, Bell, Settings, Home,
   LayoutGrid, List, Wallet, CreditCard, Truck, Ship, Package, FileText,
   MapPin, Search, X, User, Key, Info, Shield, FileCheck, LogOut, Award,
   Type, Box, ClipboardList, ArrowRight, Building2, Boxes,
   AlertCircle, Upload, Calendar, Mail, Phone, FileCheck2, CheckCircle2, Plus, Download,
-  Trash2, Copy, Check, Clock, Receipt, Share2, Sun, Moon,
+  Trash2, Copy, Check, Clock, Receipt, Share2, Sun, Moon, Pin,
 } from 'lucide-react';
 import dubaiTradeLogo from './assets/dubai-trade-logo.svg';
 import uaePassLogoSvg from './assets/uaepass-logo.svg?raw';
-import Dh from './Dh';
+import Dh, { DhAmount } from './Dh';
 
 type Screen =
   | 'onboarding'
   | 'login' | 'customerProfile' | 'accessibility'
   | 'dashboard' | 'services' | 'profile' | 'payments'
-  | 'requestDDO' | 'ddoSearch' | 'blParty' | 'ddoParty' | 'ddoDocuments'
+  | 'requestDDO' | 'ddoSearch' | 'blParty' | 'ddoParty' | 'ddoDocuments' | 'blDetails' | 'requestingParty' | 'ddoPayment' | 'ddoSuccess'
   | 'importFCL' | 'gatePass' | 'gatePassDetails' | 'addVehicle' | 'boeDetails' | 'containers' | 'vessels'
+  | 'ddoRecords' | 'customsTrack' | 'gatePassList' | 'productDetails'
   | 'forgotPassword' | 'verifyCode' | 'resetPassword' | 'notifications' | 'notificationsSettings' | 'subscription'
-  | 'cargoMgmt' | 'invoiceDownload';
+  | 'cargoMgmt' | 'invoiceDownload'
+  | 'tlucPayments'
+  | 'gatePassPayment';
 
 type View = 'grid' | 'list';
-type ModalKind = null | 'advanceDeposit' | 'autoTopup' | 'prepaidTopup' | 'prepaidEmpty' | 'addPrepaidCard' | 'paySuccess'
+type ModalKind = null | 'advanceDeposit' | 'autoTopup' | 'prepaidTopup' | 'prepaidEmpty' | 'addPrepaidCard' | 'prepaidCardCreated' | 'deletePrepaidCard' | 'paySuccess'
   | 'fclTotalPayment' | 'fclPaySuccess' | 'removeVehicle' | 'gatePassCreated'
   | 'passwordResetSuccess' | 'vatPending' | 'renewSuccess' | 'invoiceMoreInfo' | 'enableBiometrics';
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('login');
-  const [hasCompletedFirstRun, setHasCompletedFirstRun] = useState(false);
+  // Allow deep-linking via ?dt-screen=NAME, ?dt-modal=NAME, ?dt-customize=1, ?dt-tour=1
+  const qp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const initialModalKind = qp.get('dt-modal') as ModalKind | null;
+  const initialCustomize = qp.get('dt-customize') === '1';
+  const initialTour = qp.get('dt-tour') === '1';
+  // If a modal/customize/tour is requested without an explicit screen, default to dashboard
+  const initialScreen: Screen = (() => {
+    const q = qp.get('dt-screen');
+    if (q) return q as Screen;
+    if (initialModalKind || initialCustomize || initialTour) return 'dashboard';
+    return 'login';
+  })();
+  const [screen, setScreen] = useState<Screen>(initialScreen);
+  const [gatePassOrigin, setGatePassOrigin] = useState<'dashboard'|'cargoMgmt'>('dashboard');
+  const [hasCompletedFirstRun, setHasCompletedFirstRun] = useState(initialScreen !== 'login' && initialScreen !== 'onboarding');
   const [view, setView] = useState<View>('grid');
-  const [showCustomize, setShowCustomize] = useState(false);
-  const [modal, setModal] = useState<ModalKind>(null);
+  const [showCustomize, setShowCustomize] = useState(initialCustomize);
+  const [modal, setModal] = useState<ModalKind>(initialModalKind || null);
   const [fontSize, setFontSize] = useState<'Small'|'Medium'|'Large'|'Extra Large'>('Medium');
   const [profileIdx, setProfileIdx] = useState(0);
   const [defaultProfileIdx, setDefaultProfileIdx] = useState<number | null>(null);
@@ -39,15 +55,20 @@ export default function App() {
   const [sections, setSections] = useState({ payments: true, trade: true, cargo: true });
   const [biometric, setBiometric] = useState(false);
   const [loginMode, setLoginMode] = useState<'initial'|'touchId'>('initial');
-  const [hasPrepaidCard, setHasPrepaidCard] = useState(false);
+  const [hasPrepaidCard, setHasPrepaidCard] = useState(initialModalKind === 'prepaidTopup');
+  const [prepaidBalance, setPrepaidBalance] = useState('3,500.00');
+  const [prepaidCardNumber, setPrepaidCardNumber] = useState('4231 9078 5512 0148');
   const [autoTopup, setAutoTopup] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'applepay'|'rosoom'>('applepay');
+  const [paymentMethod, setPaymentMethod] = useState<'applepay'|'rosoom'|'advance'>('applepay');
   const [vehicles, setVehicles] = useState<Array<{ plate: string; qty: number }>>([]);
-  const [vehicleToRemove, setVehicleToRemove] = useState<number | null>(null);
+  const [vehicleToRemove, setVehicleToRemove] = useState<number | null>(initialModalKind === 'removeVehicle' ? 0 : null);
   const [toast, setToast] = useState<string | null>(null);
   const [hasShownBiometricPrompt, setHasShownBiometricPrompt] = useState(false);
-  const [showDashboardTour, setShowDashboardTour] = useState(false);
+  const [showDashboardTour, setShowDashboardTour] = useState(initialTour);
   const [pendingDashboardTour, setPendingDashboardTour] = useState(false);
+  const [ddoChainMode, setDdoChainMode] = useState(false);
+  const [ddoSearchOpen, setDdoSearchOpen] = useState(false);
+  const [ddoFilterStatus, setDdoFilterStatus] = useState<string>('all');
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -125,15 +146,19 @@ export default function App() {
         )}
         {screen === 'dashboard' && (
           <Dashboard view={view} setView={setView}
+            prepaidBalance={prepaidBalance} hasPrepaidCard={hasPrepaidCard}
             onOpenSettings={() => setShowCustomize(true)}
             onAdvanceDeposit={() => setModal('advanceDeposit')}
             onPrepaidCard={() => setModal(hasPrepaidCard ? 'prepaidTopup' : 'prepaidEmpty')}
             onImportFCL={() => setScreen('importFCL')}
-            onGatePass={() => setScreen('gatePass')}
+            onTluc={() => setScreen('tlucPayments')}
+            onGatePass={() => { setGatePassOrigin('dashboard'); setScreen('gatePassList'); }}
             onContainers={() => setScreen('containers')}
             onVessels={() => setScreen('vessels')}
             onNotifications={() => setScreen('notifications')}
-            onRequestDDO={() => setScreen('ddoSearch')}
+            onRequestDDO={() => setDdoSearchOpen(true)}
+            onDDORecord={(status: string) => { setDdoFilterStatus(status); setScreen('ddoRecords'); }}
+            onCustomsTrack={() => setScreen('customsTrack')}
             onTab={(t) => setScreen(t)} />
         )}
         {screen === 'services' && (
@@ -143,7 +168,8 @@ export default function App() {
         )}
         {screen === 'cargoMgmt' && (
           <CargoManagement onBack={() => setScreen('services')}
-            onInvoiceDownload={() => setScreen('invoiceDownload')} />
+            onInvoiceDownload={() => setScreen('invoiceDownload')}
+            onGatePass={() => { setGatePassOrigin('cargoMgmt'); setScreen('gatePassList'); }} />
         )}
         {screen === 'invoiceDownload' && (
           <InvoiceDownload onBack={() => setScreen('cargoMgmt')}
@@ -167,15 +193,66 @@ export default function App() {
             onSearch={() => setScreen('requestDDO')} />
         )}
         {screen === 'requestDDO' && (
-          <RequestDDO onBack={() => setScreen('ddoSearch')}
-            onBLParty={() => setScreen('blParty')}
-            onDDOParty={() => setScreen('ddoParty')}
-            onDocs={() => setScreen('ddoDocuments')}
-            onPay={() => setModal('paySuccess')} />
+          <RequestDDO onBack={() => setScreen('dashboard')}
+            onBLParty={() => { setDdoChainMode(false); setScreen('blParty'); }}
+            onDDOParty={() => { setDdoChainMode(false); setScreen('ddoParty'); }}
+            onDocs={() => { setDdoChainMode(false); setScreen('ddoDocuments'); }}
+            onBLDetails={() => setScreen('blDetails')}
+            onRequestingParty={() => { setDdoChainMode(false); setScreen('requestingParty'); }}
+            onPay={() => setScreen('ddoPayment')} />
         )}
-        {screen === 'blParty' && <BLParty onBack={() => setScreen('requestDDO')} />}
-        {screen === 'ddoParty' && <DDOParty onBack={() => setScreen('requestDDO')} />}
-        {screen === 'ddoDocuments' && <DDODocuments onBack={() => setScreen('requestDDO')} />}
+        {screen === 'blParty' && (
+          <BLParty
+            onBack={() => ddoChainMode ? setScreen('requestingParty') : setScreen('requestDDO')}
+            onSave={() => ddoChainMode ? setScreen('ddoParty') : setScreen('requestDDO')}
+            chainMode={ddoChainMode}
+          />
+        )}
+        {screen === 'ddoParty' && (
+          <DDOParty
+            onBack={() => ddoChainMode ? setScreen('blParty') : setScreen('requestDDO')}
+            onSave={() => ddoChainMode ? setScreen('ddoDocuments') : setScreen('requestDDO')}
+            chainMode={ddoChainMode}
+          />
+        )}
+        {screen === 'ddoDocuments' && (
+          <DDODocuments
+            onBack={() => ddoChainMode ? setScreen('ddoParty') : setScreen('requestDDO')}
+            onSave={() => { setDdoChainMode(false); setScreen('requestDDO'); }}
+            chainMode={ddoChainMode}
+          />
+        )}
+        {screen === 'ddoPayment' && (
+          <DDOPaymentScreen
+            onBack={() => setScreen('requestDDO')}
+            onConfirm={() => setScreen('ddoSuccess')}
+          />
+        )}
+        {screen === 'ddoSuccess' && (
+          <DDOSuccessScreen onDone={() => setScreen('dashboard')} />
+        )}
+        {screen === 'ddoRecords' && (
+          <DDORecordsScreen status={ddoFilterStatus} onBack={() => setScreen('dashboard')} />
+        )}
+        {screen === 'customsTrack' && (
+          <CustomsTrackScreen onBack={() => setScreen('dashboard')} />
+        )}
+        {screen === 'gatePassList' && (
+          <GatePassListScreen
+            onBack={() => setScreen(gatePassOrigin === 'cargoMgmt' ? 'cargoMgmt' : 'dashboard')}
+            onSelect={() => setScreen('gatePassDetails')}
+          />
+        )}
+        {screen === 'productDetails' && (
+          <ProductDetailsScreen onBack={() => setScreen('gatePassDetails')} />
+        )}
+        {screen === 'blDetails' && <BLDetailsScreen onBack={() => setScreen('requestDDO')} />}
+        {screen === 'requestingParty' && (
+          <RequestingPartyScreen
+            onBack={() => setScreen('requestDDO')}
+            onContinue={() => { setDdoChainMode(true); setScreen('blParty'); }}
+          />
+        )}
         {screen === 'importFCL' && (
           <ImportFCL onBack={() => setScreen('dashboard')}
             onPickBill={() => setModal('fclTotalPayment')} />
@@ -184,11 +261,12 @@ export default function App() {
           onPick={() => setScreen('gatePassDetails')} />}
         {screen === 'gatePassDetails' && (
           <GatePassDetails vehicles={vehicles}
-            onBack={() => setScreen('gatePass')}
+            onBack={() => setScreen('gatePassList')}
             onAddVehicle={() => setScreen('addVehicle')}
             onViewDetails={() => setScreen('boeDetails')}
+            onViewProducts={() => setScreen('productDetails')}
             onRemoveVehicle={(i) => { setVehicleToRemove(i); setModal('removeVehicle'); }}
-            onPay={() => setModal('gatePassCreated')} />
+            onPay={() => setScreen('gatePassPayment')} />
         )}
         {screen === 'addVehicle' && (
           <AddVehicle index={vehicles.length + 1}
@@ -197,6 +275,12 @@ export default function App() {
               setVehicles(v => [...v, { plate: 'DXB - C - 1234', qty: 50 }]);
               setScreen('gatePassDetails');
             }} />
+        )}
+        {screen === 'gatePassPayment' && (
+          <GatePassPayment
+            amount={vehicles.length * 38}
+            onBack={() => setScreen('gatePassDetails')}
+            onConfirm={() => { setModal('gatePassCreated'); setScreen('gatePassDetails'); }} />
         )}
         {screen === 'boeDetails' && <BOEDetails onBack={() => setScreen('gatePassDetails')} />}
         {screen === 'containers' && <Containers onBack={() => setScreen('dashboard')} />}
@@ -223,6 +307,9 @@ export default function App() {
           <Subscription onBack={() => setScreen('profile')}
             onContinue={() => setModal('vatPending')} />
         )}
+        {screen === 'tlucPayments' && (
+          <TlucPayments onBack={() => setScreen('dashboard')} />
+        )}
         </div>
       </div>
       {showCustomize && (
@@ -232,6 +319,12 @@ export default function App() {
       {showDashboardTour && screen === 'dashboard' && (
         <DashboardTour
           onDone={() => setShowDashboardTour(false)} />
+      )}
+      {ddoSearchOpen && (
+        <DDOSearchFlyout
+          onClose={() => setDdoSearchOpen(false)}
+          onSearch={() => { setDdoSearchOpen(false); setScreen('requestDDO'); }}
+        />
       )}
       {modal === 'advanceDeposit' && (
         <AdvanceDeposit onClose={() => setModal(null)}
@@ -244,7 +337,20 @@ export default function App() {
           onCancel={() => setModal('advanceDeposit')} />
       )}
       {modal === 'prepaidTopup' && (
-        <PrepaidTopup onClose={() => setModal(null)} />
+        <PrepaidTopup onClose={() => setModal(null)}
+          cardNumber={prepaidCardNumber} balance={prepaidBalance}
+          onDelete={() => setModal('deletePrepaidCard')} />
+      )}
+      {modal === 'deletePrepaidCard' && (
+        <DeletePrepaidCardModal
+          cardNumber={prepaidCardNumber}
+          onCancel={() => setModal('prepaidTopup')}
+          onConfirm={() => {
+            setHasPrepaidCard(false);
+            setPrepaidBalance('0.00');
+            setPrepaidCardNumber('');
+            setModal(null);
+          }} />
       )}
       {modal === 'prepaidEmpty' && (
         <PrepaidEmpty onClose={() => setModal(null)}
@@ -252,7 +358,19 @@ export default function App() {
       )}
       {modal === 'addPrepaidCard' && (
         <AddPrepaidCard onClose={() => setModal(null)}
-          onAdded={() => { setHasPrepaidCard(true); setModal('prepaidTopup'); }} />
+          paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
+          advanceBalance="77,001.18"
+          onAdded={(amount: string, cardNumber: string) => {
+            setHasPrepaidCard(true);
+            setPrepaidBalance(amount);
+            setPrepaidCardNumber(cardNumber);
+            setModal('prepaidCardCreated');
+          }} />
+      )}
+      {modal === 'prepaidCardCreated' && (
+        <PrepaidCardCreatedModal
+          amount={prepaidBalance} cardNumber={prepaidCardNumber}
+          onClose={() => setModal(null)} />
       )}
       {modal === 'paySuccess' && (
         <PaySuccessModal onClose={() => { setModal(null); setScreen('dashboard'); }} />
@@ -399,7 +517,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
           </button>
 
           {/* Divider */}
-          <div className="flex items-center gap-3 my-5 text-[11px] font-semibold text-gray-400 tracking-wider">
+          <div className="flex items-center gap-3 my-5 text-[11px] font-semibold text-gray-500 tracking-wider">
             <div className="flex-1 h-px bg-gray-200" /> OR <div className="flex-1 h-px bg-gray-200" />
           </div>
 
@@ -476,7 +594,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
               placeholder="Password"
               className="w-full bg-white border-[1.5px] border-[#E7EBF2] hover:border-[#1360D2]/50 focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/15 rounded-2xl pl-12 pr-12 py-4 text-[15px] text-[#0E1B3D] placeholder:text-[#6B7280] outline-none transition-all" />
             <button onClick={() => setShow(s => !s)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1360D2]">
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#1360D2]">
               {show ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
@@ -505,7 +623,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
         </button>
 
         {/* Divider */}
-        <div className="flex items-center gap-3 my-5 text-[11px] font-semibold text-gray-400 tracking-wider">
+        <div className="flex items-center gap-3 my-5 text-[11px] font-semibold text-gray-500 tracking-wider">
           <div className="flex-1 h-px bg-gray-200" /> OR CONTINUE WITH <div className="flex-1 h-px bg-gray-200" />
         </div>
 
@@ -828,76 +946,324 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 }
 
 /* ---------- 4 / 5. DASHBOARD (grid + list) ---------- */
-function Dashboard({ view, setView, onOpenSettings, onTab, onAdvanceDeposit, onPrepaidCard, onImportFCL, onGatePass, onContainers, onVessels, onNotifications, onRequestDDO }:
-  { view: View; setView: (v: View) => void; onOpenSettings: () => void; onTab: (t: Screen) => void;
-    onAdvanceDeposit: () => void; onPrepaidCard: () => void; onImportFCL: () => void; onGatePass: () => void; onContainers: () => void; onVessels: () => void; onNotifications: () => void; onRequestDDO: () => void }) {
+function Dashboard({ view, setView, prepaidBalance, hasPrepaidCard, onOpenSettings, onTab, onAdvanceDeposit, onPrepaidCard, onImportFCL, onTluc, onGatePass, onContainers, onVessels, onNotifications, onRequestDDO, onDDORecord, onCustomsTrack }:
+  { view: View; setView: (v: View) => void; prepaidBalance: string; hasPrepaidCard: boolean; onOpenSettings: () => void; onTab: (t: Screen) => void;
+    onAdvanceDeposit: () => void; onPrepaidCard: () => void; onImportFCL: () => void; onTluc: () => void; onGatePass: () => void; onContainers: () => void; onVessels: () => void; onNotifications: () => void; onRequestDDO: () => void; onDDORecord: (status: string) => void; onCustomsTrack: () => void }) {
+  const prepaidLabel = hasPrepaidCard ? prepaidBalance : '0.00';
   return (
-    <div className="bg-[#F8FAFF] min-h-full flex flex-col" data-tour-root>
+    <div className="min-h-full flex flex-col" data-tour-root
+      style={{
+        background:
+          'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%),' +
+          'radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%),' +
+          'radial-gradient(circle at 50% 100%, rgba(220,231,251,0.55) 0%, transparent 55%),' +
+          'linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)',
+      }}>
       <DashboardHeader view={view} setView={setView} onOpenSettings={onOpenSettings} onBell={onNotifications} />
-      <div className="px-6 pt-4 space-y-5">
-        <div data-tour="payments">
-        <Section title="Payments">
-          {view === 'grid' ? (
-            <div className="grid grid-cols-2 gap-3">
-              <PaymentCard icon={Wallet} amount="77001.18" label="Advance Deposit" onClick={onAdvanceDeposit} />
-              <PaymentCard icon={CreditCard} amount="3500.00" label="Prepaid Card" onClick={onPrepaidCard} />
-              <PaymentCard icon={Wallet} amount="77001.18" label="Import FCL Bills" onClick={onImportFCL} />
-              <PaymentCard icon={CreditCard} amount="3500.00" label="TLUC Payments" />
+
+      <div className="px-5 pt-5 pb-2 relative z-10 space-y-5">
+        {view === 'grid' ? (
+          <>
+            {/* Payments — all four items in one grouping */}
+            <div data-tour="payments">
+              <SectionHead title="Payments" subtitle="Balances & outstanding queue" />
+              <div className="grid grid-cols-2 gap-3">
+                <PaymentCard icon={Wallet}     amount="77,001.18" label="Advance Deposit"  onClick={onAdvanceDeposit} />
+                <PaymentCard icon={CreditCard} amount={prepaidLabel}  label="Prepaid Card"     onClick={onPrepaidCard} />
+                <PaymentCard icon={FileText} count={5} unit="declarations" label="Import FCL Bills" onClick={onImportFCL} />
+                <PaymentCard icon={Ship}       count={4} unit="BRN's" label="TLUC Payments"    onClick={onTluc} />
+              </div>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <PaymentRow icon={Wallet} amount="77001.18" label="Advance Deposit" onClick={onAdvanceDeposit} />
-              <PaymentRow icon={CreditCard} amount="3500.00" label="Prepaid Card" onClick={onPrepaidCard} />
-              <PaymentRow icon={Wallet} amount="77001.18" label="Import FCL Bills" onClick={onImportFCL} />
-              <PaymentRow icon={CreditCard} amount="3500.00" label="TLUC Payments" />
+
+            {/* Trade + */}
+            <div data-tour="trade">
+              <SectionHead title="Trade +" subtitle="Delivery orders" action="REQUEST DDO" onAction={onRequestDDO} />
+              <StatusGrid stats={[
+                { n: 5,  l: 'Nearing Expiry', tone: 'rose',   onClick: () => onDDORecord('nearing-expiry') },
+                { n: 12, l: 'Submitted',      tone: 'indigo', onClick: () => onDDORecord('submitted') },
+                { n: 3,  l: 'Pending',        tone: 'amber',  onClick: () => onDDORecord('pending') },
+                { n: 5,  l: 'Completed',      tone: 'green',  onClick: () => onDDORecord('completed') },
+              ]} />
             </div>
-          )}
-        </Section>
-        </div>
 
-        <div data-tour="trade">
-        <Section title="Trade +" action="REQUEST DDO" onAction={onRequestDDO}>
-          <StatGrid stats={[
-            { n: 5, l: 'Nearing Expiry', c: 'text-[#D67E74]' },
-            { n: 12, l: 'Submitted', c: 'text-[#6A7BC7]' },
-            { n: 3, l: 'Pending', c: 'text-[#D3AB40]' },
-            { n: 5, l: 'Completed', c: 'text-[#5CB78F]' },
-          ]} />
-        </Section>
-        </div>
+            {/* Custom Declaration */}
+            <div data-tour="declaration">
+              <SectionHead title="Custom Declaration" subtitle="Customs status" action="TRACK" onAction={onCustomsTrack} />
+              <StatusGrid stats={[
+                { n: 5,  l: 'Nearing Expiry', tone: 'rose'   },
+                { n: 12, l: 'Submitted',      tone: 'indigo' },
+                { n: 3,  l: 'Pending',        tone: 'amber'  },
+                { n: 5,  l: 'Cleared',        tone: 'green'  },
+              ]} />
+            </div>
 
-        <div data-tour="declaration">
-        <Section title="Custom Declaration" action="TRACK">
-          <StatGrid stats={[
-            { n: 5, l: 'Nearing Expiry', c: 'text-[#D67E74]' },
-            { n: 12, l: 'Submitted', c: 'text-[#6A7BC7]' },
-            { n: 3, l: 'Pending', c: 'text-[#D3AB40]' },
-            { n: 5, l: 'Cleared', c: 'text-[#5CB78F]' },
-          ]} />
-        </Section>
-        </div>
+            {/* Cargo Management */}
+            <div data-tour="cargo">
+              <SectionHead title="Cargo Management" subtitle="Your saved records" />
+              <div className="grid grid-cols-3 gap-3">
+                <CargoTile icon={Ship}    n={2}   l="Vessels"        sub="added" onClick={onVessels} />
+                <CargoTile icon={Package} n={10}  l="Containers"     sub="added" onClick={onContainers} />
+                <CargoTile icon={FileText} n={100} l="Gate Pass · BOE" sub="active" onClick={onGatePass} />
+              </div>
+            </div>
 
-        <div data-tour="cargo">
-        <Section title="Cargo Management">
-          <div className="grid grid-cols-3 gap-3">
-            <CargoCard icon={Ship} n={2} l="Vessels Added" onClick={onVessels} />
-            <CargoCard icon={Package} n={10} l="Containers Added" onClick={onContainers} />
-            <CargoCard icon={FileText} n={100} l="Gate Pass · BOE" />
-          </div>
-        </Section>
-        </div>
+            {/* Recently used */}
+            <div data-tour="recent">
+              <SectionHead title="Recently used" subtitle="Pick up where you left off" />
+              <div className="space-y-2">
+                <RecentRow icon={FileCheck} title="Delivery Order" sub="Used 2 hours ago" />
+                <RecentRow icon={MapPin}    title="Gate Pass"      sub="Used yesterday" onClick={onGatePass} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* List view — grouped by service domain */}
+            <div data-tour="payments">
+              <SectionHead title="Payments" subtitle="Balances & outstanding queue" />
+              <div className="space-y-2">
+                <PaymentRow icon={Wallet}     amount="77,001.18" label="Advance Deposit"  onClick={onAdvanceDeposit} />
+                <PaymentRow icon={CreditCard} amount={prepaidLabel}  label="Prepaid Card"     onClick={onPrepaidCard} />
+                <PaymentRow icon={FileText} count={5} unit="declarations" label="Import FCL Bills" onClick={onImportFCL} />
+                <PaymentRow icon={Ship}       count={4} unit="BRN's" label="TLUC Payments"    onClick={onTluc} />
+              </div>
+            </div>
 
-        <div data-tour="recent">
-        <Section title="Recently Used Services">
-          <div className="space-y-2">
-            <RecentRow icon={FileCheck} title="Delivery Order" sub="Used 2 hours ago" />
-            <RecentRow icon={MapPin} title="Gate Pass" sub="Used yesterday" onClick={onGatePass} />
-          </div>
-        </Section>
-        </div>
+            <div data-tour="carrier">
+              <SectionHead title="Carrier Management" subtitle="Your saved records" />
+              <div className="space-y-2">
+                <ListRow icon={Ship}    title="Vessels added"    value={2}  unit="vessels"    onClick={onVessels} />
+                <ListRow icon={Package} title="Containers added" value={10} unit="containers" onClick={onContainers} />
+              </div>
+            </div>
+
+            <div data-tour="trade">
+              <SectionHead title="Cargo Management" subtitle="Delivery orders" action="REQUEST DDO" onAction={onRequestDDO} />
+              <div className="space-y-2">
+                <ListRow icon={FileCheck} title="Trade + · DDO"
+                  subtitle="12 submitted · 3 pending · 5 nearing expiry"
+                  value={12} unit="active" onClick={() => onDDORecord('all')} />
+              </div>
+            </div>
+
+            <div data-tour="declaration">
+              <SectionHead title="Cargo Clearance" subtitle="Customs status" action="TRACK" onAction={onCustomsTrack} />
+              <div className="space-y-2">
+                <ListRow icon={ClipboardList} title="Customs Declaration"
+                  subtitle="12 submitted · 3 pending · 5 cleared"
+                  value={12} unit="active" onClick={onCustomsTrack} />
+              </div>
+            </div>
+
+            <div data-tour="gate">
+              <SectionHead title="Gate Management" subtitle="Gate Pass · BOE" />
+              <div className="space-y-2">
+                <ListRow icon={MapPin} title="Gate Pass available"
+                  subtitle="Active passes ready to use"
+                  value={100} unit="passes" onClick={onGatePass} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
       <BottomNav active="home" onTab={onTab} dataTour="nav" />
     </div>
+  );
+}
+
+/* ---------- Dashboard hero (overall balance + quick pay actions) ---------- */
+function BalanceHero({ onAdvanceDeposit, onPrepaidCard }: { onAdvanceDeposit: () => void; onPrepaidCard: () => void }) {
+  return (
+    <div className="relative overflow-hidden rounded-3xl p-5 text-white shadow-[0_22px_44px_-22px_rgba(14,27,61,0.6)]"
+      style={{ background: 'linear-gradient(135deg, #0E47A6 0%, #1360D2 50%, #2950E5 100%)' }}>
+      <div className="absolute -top-12 -right-12 w-44 h-44 rounded-full bg-white/15 blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-16 -left-10 w-44 h-44 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+
+      <div className="relative flex items-center justify-between">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">Available balance</div>
+          <div className="text-[28px] font-bold leading-tight mt-1 flex items-center gap-1.5">
+            <Dh /> 80,501.18
+          </div>
+          <div className="mt-0.5 text-[12px] text-white/75">Across Advance Deposit + Prepaid Card</div>
+        </div>
+        <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
+          <Wallet size={22} />
+        </div>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-2 gap-2.5">
+        <button onClick={onAdvanceDeposit}
+          className="text-left bg-white/12 backdrop-blur hover:bg-white/20 transition rounded-2xl px-3.5 py-3 border border-white/10">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-white/70">Advance Deposit</div>
+            <ChevronRight size={14} className="text-white/70" />
+          </div>
+          <div className="mt-1 text-[15px] font-bold flex items-center gap-1"><Dh /> 77,001.18</div>
+        </button>
+        <button onClick={onPrepaidCard}
+          className="text-left bg-white/12 backdrop-blur hover:bg-white/20 transition rounded-2xl px-3.5 py-3 border border-white/10">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-white/70">Prepaid Card</div>
+            <ChevronRight size={14} className="text-white/70" />
+          </div>
+          <div className="mt-1 text-[15px] font-bold flex items-center gap-1"><Dh /> 3,500.00</div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Section heading with optional subtitle + action ---------- */
+function SectionHead({ title, subtitle, action, onAction }:
+  { title: string; subtitle?: string; action?: string; onAction?: () => void }) {
+  return (
+    <div className="flex items-end justify-between mb-3">
+      <div>
+        <div className="text-[15px] font-bold text-[#0E1B3D] tracking-tight">{title}</div>
+        {subtitle && <div className="text-[11.5px] text-[#6B7280] mt-0.5">{subtitle}</div>}
+      </div>
+      {action && (
+        <button onClick={onAction}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#EAF1FE] text-[#1360D2] text-[10.5px] font-bold uppercase tracking-wider">
+          {action} <ChevronRight size={11} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Pay-queue card (counts) ---------- */
+function PayQueueCard({ icon: Icon, count, unit, label, tone, hint, onClick }:
+  { icon: any; count: number; unit: string; label: string; tone: 'amber'|'blue'; hint?: string; onClick?: () => void }) {
+  const tones = {
+    amber: { bg: '#FEF6E7', fg: '#B45309', dot: '#F59E0B' },
+    blue:  { bg: '#EAF1FE', fg: '#0E47A6', dot: '#1360D2' },
+  } as const;
+  const t = tones[tone];
+  return (
+    <button onClick={onClick}
+      className="relative bg-white rounded-2xl p-4 text-left w-full border border-[#EAF0FA] shadow-[0_8px_18px_-14px_rgba(14,27,61,0.18)] hover:border-[#B7CDF1] transition">
+      <div className="flex items-center justify-between">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: t.bg, color: t.fg }}>
+          <Icon size={20} />
+        </div>
+        <ChevronRight size={14} className="text-gray-300" />
+      </div>
+      <div className="mt-3 text-[24px] font-bold text-[#0E1B3D] leading-none">
+        {count}<span className="ml-1 text-[12px] font-semibold text-[#6B7280]">{unit}</span>
+      </div>
+      <div className="text-[11.5px] text-[#4A5565] font-medium mt-1">{label}</div>
+      {hint && (
+        <div className="mt-2 inline-flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: t.fg }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.dot }} /> {hint}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function PayQueueRow({ icon: Icon, count, unit, label, tone, hint, onClick }:
+  { icon: any; count: number; unit: string; label: string; tone: 'amber'|'blue'; hint?: string; onClick?: () => void }) {
+  const tones = {
+    amber: { bg: '#FEF6E7', fg: '#B45309', dot: '#F59E0B' },
+    blue:  { bg: '#EAF1FE', fg: '#0E47A6', dot: '#1360D2' },
+  } as const;
+  const t = tones[tone];
+  return (
+    <button onClick={onClick}
+      className="w-full bg-white rounded-2xl p-3.5 border border-[#EAF0FA] shadow-sm flex items-center gap-3 text-left">
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: t.bg, color: t.fg }}>
+        <Icon size={20} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[15px] font-bold text-[#0E1B3D]">
+          {count} <span className="text-[12px] font-semibold text-[#6B7280]">{unit}</span>
+        </div>
+        <div className="text-[11.5px] text-[#4A5565] font-medium truncate">{label}</div>
+        {hint && (
+          <div className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: t.fg }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.dot }} /> {hint}
+          </div>
+        )}
+      </div>
+      <ChevronRight size={16} className="text-gray-500" />
+    </button>
+  );
+}
+
+/* ---------- Status grid (4-cell stat board with colour-coded pills) ---------- */
+function StatusGrid({ stats }: { stats: { n: number; l: string; tone: 'rose'|'indigo'|'amber'|'green'; onClick?: () => void }[] }) {
+  const tones = {
+    rose:   { bar: '#F5B5AA', dot: '#E5634B', bg: '#FEF1EE' },
+    indigo: { bar: '#B7C5F4', dot: '#3F5BD9', bg: '#EEF2FE' },
+    amber:  { bar: '#F2D89E', dot: '#D08C13', bg: '#FBF4E1' },
+    green:  { bar: '#A6D7BB', dot: '#1F9F5F', bg: '#E8F7EE' },
+  } as const;
+  return (
+    <div className="grid grid-cols-4 gap-2.5">
+      {stats.map((s, i) => {
+        const t = tones[s.tone];
+        const inner = (
+          <>
+            <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl" style={{ background: t.bar }} />
+            <div className="font-bold text-[#0E1B3D] text-[20px] leading-none">{s.n}</div>
+            <div className="mt-1.5 text-[9.5px] font-bold" style={{ color: t.dot }}>
+              {s.l}
+            </div>
+          </>
+        );
+        return s.onClick ? (
+          <button key={i} onClick={s.onClick} className="relative bg-white rounded-2xl py-3.5 px-2 shadow-[0_6px_14px_-12px_rgba(14,27,61,0.18)] border border-[#F1F5FB] text-center w-full">
+            {inner}
+          </button>
+        ) : (
+          <div key={i} className="relative bg-white rounded-2xl py-3.5 px-2 shadow-[0_6px_14px_-12px_rgba(14,27,61,0.18)] border border-[#F1F5FB] text-center">
+            {inner}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- Generic list row (icon + title + sub + count) ---------- */
+function ListRow({ icon: Icon, title, subtitle, value, unit, onClick }:
+  { icon: any; title: string; subtitle?: string; value?: number | string; unit?: string; onClick?: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="w-full bg-white rounded-2xl p-3.5 border border-[#EAF0FA] shadow-sm flex items-center gap-3 text-left">
+      <div className="w-11 h-11 rounded-xl bg-[#EAF1FE] text-[#1360D2] flex items-center justify-center shrink-0">
+        <Icon size={20} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13.5px] font-bold text-[#0E1B3D] truncate">{title}</div>
+        {subtitle && <div className="text-[11.5px] text-[#6B7280] mt-0.5 truncate">{subtitle}</div>}
+      </div>
+      {typeof value !== 'undefined' && (
+        <div className="text-right shrink-0">
+          <div className="text-[16px] font-bold text-[#0E1B3D] leading-none">{value}</div>
+          {unit && <div className="text-[10px] font-semibold text-[#6B7280] mt-0.5 uppercase tracking-wider">{unit}</div>}
+        </div>
+      )}
+      <ChevronRight size={16} className="text-gray-500" />
+    </button>
+  );
+}
+
+/* ---------- Cargo tile (icon + count + label) ---------- */
+function CargoTile({ icon: Icon, n, l, sub, onClick }: any) {
+  return (
+    <button onClick={onClick}
+      className="bg-white rounded-2xl py-4 px-2.5 border border-[#EAF0FA] shadow-[0_6px_14px_-12px_rgba(14,27,61,0.18)] flex flex-col items-center gap-1 w-full hover:border-[#B7CDF1] transition">
+      <div className="w-10 h-10 rounded-xl bg-[#EAF1FE] flex items-center justify-center text-[#1360D2]">
+        <Icon size={20} />
+      </div>
+      <div className="font-bold text-[#0E1B3D] text-[18px] leading-none mt-1.5">{n}</div>
+      <div className="text-[10.5px] font-bold text-[#0E1B3D] text-center leading-tight">{l}</div>
+      {sub && <div className="text-[9.5px] text-[#6B7280] font-medium uppercase tracking-wider">{sub}</div>}
+    </button>
   );
 }
 
@@ -995,38 +1361,48 @@ function DashboardTour({ onDone }: { onDone: () => void }) {
 function DashboardHeader({ view, setView, onOpenSettings, onBell }:
   { view: View; setView: (v: View) => void; onOpenSettings: () => void; onBell?: () => void }) {
   return (
-    <div className="bg-[#0E1B3D] dt-safe-top px-6 pt-6 pb-4 text-white">
-      <div className="flex items-center justify-between">
+    <div className="relative overflow-hidden dt-safe-top px-6 pt-6 pb-6 text-white"
+      style={{ background: 'linear-gradient(165deg, #0A1A3D 0%, #0E1B3D 55%, #14306E 100%)' }}>
+      <div className="absolute -top-24 -right-24 w-[300px] h-[300px] rounded-full opacity-25 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+      <div className="absolute bottom-[-60px] -left-16 w-[260px] h-[260px] rounded-full opacity-15 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+
+      <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="relative w-11 h-11 rounded-xl bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] flex items-center justify-center text-lg font-bold">
+          <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] flex items-center justify-center text-lg font-bold shadow-[0_8px_20px_-8px_rgba(19,96,210,0.7)]">
             A
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#14C9A9] border-2 border-white rounded-full" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#14C9A9] border-2 border-[#0E1B3D] rounded-full" />
           </div>
           <div>
-            <div className="font-bold">Ahmed</div>
-            <div className="text-xs opacity-80">Agent Code : 123456</div>
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Good morning</div>
+            <div className="text-[16px] font-bold leading-tight">Ahmed</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button data-tour-anchor="settings" onClick={onOpenSettings} className="w-9 h-9 rounded-xl flex items-center justify-center">
-            <Settings size={20} />
+          <button data-tour-anchor="settings" onClick={onOpenSettings}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/10 flex items-center justify-center hover:bg-white/20">
+            <Settings size={17} />
           </button>
-          <button data-tour-anchor="bell" onClick={onBell} className="relative w-9 h-9 rounded-xl flex items-center justify-center">
-            <Bell size={20} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F9A83D] border border-white rounded-full" />
+          <button data-tour-anchor="bell" onClick={onBell}
+            className="relative w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/10 flex items-center justify-center hover:bg-white/20">
+            <Bell size={17} />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#F9A83D] border border-[#0E1B3D] rounded-full" />
           </button>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between">
-        <div className="text-lg font-bold">Dashboard</div>
-        <div className="bg-white border border-gray-200 rounded-xl p-0.5 flex shadow-sm">
+
+      <div className="relative mt-4 flex items-end justify-between">
+        <div>
+          <div className="text-[22px] font-bold leading-tight">Dashboard</div>
+          <div className="text-[12px] text-white/65 mt-0.5">Agent Code · 123456</div>
+        </div>
+        <div className="bg-white/10 backdrop-blur border border-white/15 rounded-xl p-0.5 flex shadow-sm">
           <button onClick={() => setView('grid')}
-            className={`w-10 h-8 rounded-lg flex items-center justify-center ${view === 'grid' ? 'bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] text-white' : 'text-gray-500'}`}>
-            <LayoutGrid size={16} />
+            className={`w-9 h-7 rounded-lg flex items-center justify-center transition ${view === 'grid' ? 'bg-white text-[#0E1B3D]' : 'text-white/70'}`}>
+            <LayoutGrid size={14} />
           </button>
           <button onClick={() => setView('list')}
-            className={`w-10 h-8 rounded-lg flex items-center justify-center ${view === 'list' ? 'bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] text-white' : 'text-gray-500'}`}>
-            <List size={16} />
+            className={`w-9 h-7 rounded-lg flex items-center justify-center transition ${view === 'list' ? 'bg-white text-[#0E1B3D]' : 'text-white/70'}`}>
+            <List size={14} />
           </button>
         </div>
       </div>
@@ -1051,13 +1427,16 @@ function Section({ title, action, onAction, children }:
   );
 }
 
-function PaymentCard({ icon: Icon, amount, label, onClick }: any) {
+function PaymentCard({ icon: Icon, amount, label, count, unit, onClick }: any) {
+  const isCount = typeof count === 'number';
   return (
     <button onClick={onClick} className="bg-white rounded-2xl px-3 py-3.5 shadow-sm flex items-center gap-2 text-left w-full">
       <Icon size={20} className="text-[#1360D2]" />
       <div className="flex-1 min-w-0">
         <div className="font-bold text-[#27314B] text-[15px] truncate">
-          <Dh /> {amount}
+          {isCount
+            ? <><span>{count}</span> <span className="text-[11px] font-semibold text-[#7F8A9F]">{unit}</span></>
+            : <><Dh /> {amount}</>}
         </div>
         <div className="text-[10px] text-[#7F8A9F] font-medium truncate">{label}</div>
       </div>
@@ -1066,7 +1445,8 @@ function PaymentCard({ icon: Icon, amount, label, onClick }: any) {
   );
 }
 
-function PaymentRow({ icon: Icon, amount, label, onClick }: any) {
+function PaymentRow({ icon: Icon, amount, label, count, unit, onClick }: any) {
+  const isCount = typeof count === 'number';
   return (
     <button onClick={onClick} className="bg-white rounded-2xl px-4 py-3.5 shadow-sm flex items-center gap-3 w-full text-left">
       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#1360D2]">
@@ -1074,11 +1454,13 @@ function PaymentRow({ icon: Icon, amount, label, onClick }: any) {
       </div>
       <div className="flex-1">
         <div className="font-bold text-[#27314B] text-[15px]">
-          <Dh /> {amount}
+          {isCount
+            ? <><span>{count}</span> <span className="text-[12px] font-semibold text-[#7F8A9F]">{unit}</span></>
+            : <><Dh /> {amount}</>}
         </div>
         <div className="text-[11px] text-[#7F8A9F] font-medium">{label}</div>
       </div>
-      <ChevronRight size={16} className="text-gray-400" />
+      <ChevronRight size={16} className="text-gray-500" />
     </button>
   );
 }
@@ -1116,7 +1498,7 @@ function RecentRow({ icon: Icon, title, sub, onClick }: any) {
         <div className="font-bold text-[#0E1B3D] text-sm">{title}</div>
         <div className="text-xs text-gray-500">{sub}</div>
       </div>
-      <ChevronRight size={16} className="text-gray-400" />
+      <ChevronRight size={16} className="text-gray-500" />
     </button>
   );
 }
@@ -1156,7 +1538,7 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt }:
           <div className="text-[11px] opacity-80">13 services available</div>
         </div>
         <div className="mt-3 bg-white rounded-lg flex items-center gap-2 px-3 py-2">
-          <Search size={14} className="text-gray-400" />
+          <Search size={14} className="text-gray-500" />
           <input placeholder="Search services..."
             className="flex-1 text-xs outline-none text-gray-700" />
         </div>
@@ -1173,7 +1555,7 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt }:
           <button key={c.k} onClick={() => setTab(c.k as any)}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-bold ${
               tab === c.k ? 'bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] text-white' : 'bg-gray-100 text-gray-600'}`}>
-            {c.t} <span className={tab === c.k ? 'text-white/80' : 'text-gray-400'}>({c.n})</span>
+            {c.t} <span className={tab === c.k ? 'text-white/80' : 'text-gray-500'}>({c.n})</span>
           </button>
         ))}
       </div>
@@ -1245,7 +1627,7 @@ function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, o
                 </div>
                 <div>
                   <div className="font-bold text-[#0E1B3D]">Biometric Login</div>
-                  <div className="text-xs text-gray-400">Use fingerprint to login</div>
+                  <div className="text-xs text-gray-500">Use fingerprint to login</div>
                 </div>
               </div>
               <Toggle on={biometric} onChange={setBiometric} />
@@ -1268,7 +1650,7 @@ function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, o
                   <row.icon size={18} className="text-[#0E1B3D]" />
                   <span className="font-bold text-sm text-[#0E1B3D]">{row.label}</span>
                 </div>
-                <ChevronRight size={16} className="text-gray-400" />
+                <ChevronRight size={16} className="text-gray-500" />
               </button>
             ))}
           </div>
@@ -1411,7 +1793,7 @@ function BottomNav({ active, onTab, dataTour }: { active: 'home'|'services'|'pro
     { k: 'profile', label: 'Profile', icon: User, screen: 'profile' as Screen },
   ];
   return (
-    <div data-tour={dataTour} className="sticky bottom-0 left-0 right-0 z-30 mt-auto bg-white border-t border-gray-200 shadow-[0_-6px_18px_-12px_rgba(14,27,61,0.18)] px-6 py-3 flex justify-between">
+    <div data-tour={dataTour} className="sticky -bottom-6 left-0 right-0 z-30 mt-auto bg-white border-t border-gray-200 shadow-[0_-6px_18px_-12px_rgba(14,27,61,0.18)] px-6 pt-3 pb-9 flex justify-between">
       {items.map(it => {
         const Icon = it.icon;
         const isActive = active === it.k;
@@ -1496,13 +1878,20 @@ function AdvanceDeposit({ onClose, paymentMethod, setPaymentMethod, autoTopup, o
             className={`w-full bg-white border rounded-lg py-4 flex items-center justify-center gap-2 shadow-sm
               ${paymentMethod === 'applepay' ? 'border-black' : 'border-gray-200'}`}>
             <span className="font-medium text-black">Pay with</span>
-            <span className="font-bold text-black text-lg" style={{ fontFamily: 'system-ui' }}> Pay</span>
+            <span className="inline-flex items-center gap-1 text-black">
+              <svg width="14" height="17" viewBox="0 0 14 17" fill="currentColor" aria-hidden="true">
+                <path d="M11.182 9.092c-.02-2.07 1.69-3.063 1.768-3.111-.965-1.41-2.464-1.603-2.998-1.625-1.276-.13-2.49.752-3.137.752-.66 0-1.66-.737-2.733-.715-1.404.021-2.701.816-3.42 2.072-1.46 2.527-.373 6.262 1.054 8.314.699 1.005 1.529 2.131 2.616 2.091 1.05-.043 1.447-.679 2.717-.679 1.27 0 1.626.679 2.733.654 1.13-.022 1.844-1.022 2.534-2.031.798-1.165 1.125-2.293 1.144-2.352-.025-.012-2.196-.844-2.218-3.37zM9.222 3.06C9.79 2.36 10.176 1.388 10.07.42c-.83.034-1.836.555-2.424 1.254-.527.617-.988 1.605-.864 2.553.928.071 1.873-.473 2.44-1.166z"/>
+              </svg>
+              <span className="font-bold text-lg" style={{ fontFamily: 'system-ui' }}>Pay</span>
+            </span>
           </button>
           <div className="text-sm font-bold text-[#696F83] mt-3 mb-1">Other Method</div>
           <button onClick={() => setPaymentMethod('rosoom')}
             className={`w-full bg-white border rounded-lg py-3.5 flex items-center gap-3 px-3
               ${paymentMethod === 'rosoom' ? 'border-[#1360D2]' : 'border-gray-200'}`}>
-            <CreditCard size={26} className="text-[#1360D2]" />
+            <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+              <Building2 size={18} className="text-[#1360D2]" />
+            </div>
             <span className="font-medium text-[#1360D2]">Rosoom Payment Gateway</span>
           </button>
           <div className="flex items-center gap-2 mt-3">
@@ -1562,11 +1951,30 @@ function AutoTopupModal({ onSave, onCancel }: { onSave: () => void; onCancel: ()
 }
 
 /* ---------- PREPAID CARD TOP-UP (has card) ---------- */
-function PrepaidTopup({ onClose }: { onClose: () => void }) {
+function PrepaidTopup({ onClose, cardNumber, balance, onDelete }:
+  { onClose: () => void; cardNumber: string; balance: string; onDelete: () => void }) {
   const [amount, setAmount] = useState('1000');
   return (
     <BottomSheet title="Prepaid Card" onClose={onClose}>
       <div className="space-y-5">
+        {/* Current card snapshot */}
+        <div className="relative rounded-2xl text-white p-4 shadow-[0_18px_36px_-18px_rgba(14,27,61,0.4)] overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #0E47A6 0%, #1360D2 50%, #2950E5 100%)' }}>
+          <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/15 blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-12 -left-8 w-32 h-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+          <div className="relative flex items-center justify-between">
+            <CreditCard size={20} />
+            <div className="text-[10px] uppercase tracking-wider font-bold text-white/75">Prepaid Card</div>
+          </div>
+          <div className="relative mt-3 text-[15px] tracking-[0.18em] font-mono">{cardNumber}</div>
+          <div className="relative mt-3">
+            <div className="text-[10px] uppercase tracking-wider text-white/70 font-bold">Available balance</div>
+            <div className="text-[20px] font-bold mt-0.5 flex items-center gap-0.5">
+              <Dh /> {balance}
+            </div>
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-[#364153] mb-2">Enter Top Up Amount</label>
           <div className="relative">
@@ -1603,6 +2011,12 @@ function PrepaidTopup({ onClose }: { onClose: () => void }) {
         </div>
         <button onClick={onClose}
           className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold shadow">TOP UP</button>
+        <div className="pt-2 text-center">
+          <button onClick={onDelete}
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#EF4444] hover:text-[#B91C1C]">
+            <Trash2 size={13} /> Delete this card
+          </button>
+        </div>
       </div>
     </BottomSheet>
   );
@@ -1628,66 +2042,206 @@ function PrepaidEmpty({ onClose, onAdd }: { onClose: () => void; onAdd: () => vo
 }
 
 /* ---------- ADD PREPAID CARD ---------- */
-function AddPrepaidCard({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+function AddPrepaidCard({ onClose, onAdded, paymentMethod, setPaymentMethod, advanceBalance }:
+  { onClose: () => void;
+    onAdded: (amount: string, cardNumber: string) => void;
+    paymentMethod: 'applepay'|'rosoom'|'advance';
+    setPaymentMethod: (m: 'applepay'|'rosoom'|'advance') => void;
+    advanceBalance: string }) {
+  const [amount, setAmount] = useState('1000');
+  const [code, setCode] = useState('+971');
+  const [mobile, setMobile] = useState('');
+  const [confirmCode, setConfirmCode] = useState('+971');
+  const [confirmMobile, setConfirmMobile] = useState('');
+
+  const mobileMatches = mobile.length > 0 && mobile === confirmMobile;
+  const canSubmit = !!amount && parseFloat(amount) > 0 && mobileMatches;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    const cardNumber = '4231 ' +
+      Math.floor(1000 + Math.random() * 9000) + ' ' +
+      Math.floor(1000 + Math.random() * 9000) + ' ' +
+      Math.floor(1000 + Math.random() * 9000);
+    const formattedAmount = parseFloat(amount).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    onAdded(formattedAmount, cardNumber);
+  };
+
   return (
     <BottomSheet title="Add Prepaid Card" onClose={onClose}>
-      <div className="space-y-5">
-        <div className="bg-gradient-to-r from-[#155DFC] to-[#0E1B3D] rounded-2xl p-5 text-white relative h-[180px] shadow-lg">
-          <div className="flex items-center justify-between">
-            <CreditCard size={32} />
-            <div className="opacity-90">Prepaid Card</div>
-          </div>
-          <div className="mt-8 text-xl tracking-widest font-mono">•••• •••• •••• ••••</div>
-          <div className="flex justify-between mt-5">
-            <div>
-              <div className="text-xs opacity-75">Cardholder</div>
-              <div className="text-sm font-medium">YOUR NAME</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs opacity-75">Expires</div>
-              <div className="text-sm font-medium">MM/YY</div>
-            </div>
-          </div>
+      <div className="space-y-4">
+        {/* Notice */}
+        <div className="rounded-2xl p-4 border-[1.5px]"
+          style={{ background: '#FEF6E3', borderColor: '#F5D58E' }}>
+          <ul className="text-[12.5px] text-[#7A5A11] space-y-1.5 leading-relaxed list-disc pl-4">
+            <li>Please ensure correct Mobile No. is provided.</li>
+            <li>Your Pin Code will be sent via SMS to the Mobile No. provided below.</li>
+          </ul>
         </div>
+
+        {/* Amount */}
         <div>
-          <label className="block text-sm font-medium text-[#364153] mb-2">Card Number</label>
-          <input placeholder="1234 5678 9012 3456"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none" />
+          <label className="block text-[12.5px] font-semibold text-[#4A5565] mb-1.5">
+            Amount (AED)<span className="text-red-500 ml-1">*</span>
+          </label>
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0E1B3D] font-bold text-sm"><Dh /></span>
+            <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              inputMode="decimal" placeholder="0.00"
+              className="w-full bg-white border border-[#E0EAFB] rounded-xl pl-11 pr-4 py-3.5 text-[15px] text-[#0E1B3D] outline-none focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/15" />
+          </div>
+          <div className="text-[11px] text-gray-500 mt-1.5">Min: <span className="text-[#0E1B3D] font-semibold"><Dh /> 100.00</span> · Max: <span className="text-[#0E1B3D] font-semibold"><Dh /> 50,000.00</span></div>
         </div>
+
+        {/* Mobile No. */}
         <div>
-          <label className="block text-sm font-medium text-[#364153] mb-2">Cardholder Name</label>
-          <input placeholder="JOHN DOE"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-[#364153] mb-2">Expiry Date</label>
-            <input placeholder="MM/YY"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none" />
+          <label className="block text-[12.5px] font-semibold text-[#4A5565] mb-1.5">
+            Mobile No.<span className="text-red-500 ml-1">*</span>
+          </label>
+          <div className="flex gap-2">
+            <select value={code} onChange={(e) => setCode(e.target.value)}
+              className="w-[90px] bg-white border border-[#E0EAFB] rounded-xl px-3 py-3.5 text-[14px] text-[#0E1B3D] outline-none focus:border-[#1360D2]">
+              <option value="+971">+971</option>
+              <option value="+91">+91</option>
+              <option value="+44">+44</option>
+              <option value="+1">+1</option>
+            </select>
+            <input value={mobile} onChange={(e) => setMobile(e.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric" placeholder="50 123 4567"
+              className="flex-1 bg-white border border-[#E0EAFB] rounded-xl px-4 py-3.5 text-[15px] text-[#0E1B3D] outline-none focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/15" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-[#364153] mb-2">CVV</label>
-            <input placeholder="123"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none" />
+        </div>
+
+        {/* Confirm Mobile No. */}
+        <div>
+          <label className="block text-[12.5px] font-semibold text-[#4A5565] mb-1.5">
+            Confirm Mobile No.<span className="text-red-500 ml-1">*</span>
+          </label>
+          <div className="flex gap-2">
+            <select value={confirmCode} onChange={(e) => setConfirmCode(e.target.value)}
+              className="w-[90px] bg-white border border-[#E0EAFB] rounded-xl px-3 py-3.5 text-[14px] text-[#0E1B3D] outline-none focus:border-[#1360D2]">
+              <option value="+971">+971</option>
+              <option value="+91">+91</option>
+              <option value="+44">+44</option>
+              <option value="+1">+1</option>
+            </select>
+            <input value={confirmMobile} onChange={(e) => setConfirmMobile(e.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric" placeholder="50 123 4567"
+              className={`flex-1 bg-white border rounded-xl px-4 py-3.5 text-[15px] text-[#0E1B3D] outline-none focus:ring-4 transition
+                ${confirmMobile && !mobileMatches
+                  ? 'border-[#EF4444] focus:border-[#EF4444] focus:ring-[#EF4444]/15'
+                  : 'border-[#E0EAFB] focus:border-[#1360D2] focus:ring-[#1360D2]/15'}`} />
+          </div>
+          {confirmMobile && !mobileMatches && (
+            <div className="text-[11px] text-[#EF4444] font-medium mt-1">Mobile numbers don't match.</div>
+          )}
+        </div>
+
+        {/* Mode of Payment */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="font-bold text-[13px] text-[#0E1B3D]">Mode of Payment</span>
+            <span className="bg-gray-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">Default</span>
+          </div>
+          <button onClick={() => setPaymentMethod('applepay')}
+            className={`w-full bg-white border rounded-xl py-3.5 flex items-center justify-center gap-2 shadow-sm transition
+              ${paymentMethod === 'applepay' ? 'border-black' : 'border-gray-200'}`}>
+            <span className="font-medium text-black">Pay with</span>
+            <span className="inline-flex items-center gap-1 text-black">
+              <svg width="14" height="17" viewBox="0 0 14 17" fill="currentColor" aria-hidden="true">
+                <path d="M11.182 9.092c-.02-2.07 1.69-3.063 1.768-3.111-.965-1.41-2.464-1.603-2.998-1.625-1.276-.13-2.49.752-3.137.752-.66 0-1.66-.737-2.733-.715-1.404.021-2.701.816-3.42 2.072-1.46 2.527-.373 6.262 1.054 8.314.699 1.005 1.529 2.131 2.616 2.091 1.05-.043 1.447-.679 2.717-.679 1.27 0 1.626.679 2.733.654 1.13-.022 1.844-1.022 2.534-2.031.798-1.165 1.125-2.293 1.144-2.352-.025-.012-2.196-.844-2.218-3.37zM9.222 3.06C9.79 2.36 10.176 1.388 10.07.42c-.83.034-1.836.555-2.424 1.254-.527.617-.988 1.605-.864 2.553.928.071 1.873-.473 2.44-1.166z"/>
+              </svg>
+              <span className="font-bold text-lg" style={{ fontFamily: 'system-ui' }}>Pay</span>
+            </span>
+          </button>
+          <div className="text-[11.5px] font-bold text-[#696F83] mt-3 mb-1.5 uppercase tracking-wider">Other Methods</div>
+          <div className="space-y-2">
+            <button onClick={() => setPaymentMethod('rosoom')}
+              className={`w-full bg-white border rounded-xl py-3 flex items-center gap-3 px-3 transition
+                ${paymentMethod === 'rosoom' ? 'border-[#1360D2]' : 'border-gray-200'}`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <Building2 size={18} className="text-[#1360D2]" />
+              </div>
+              <span className="font-medium text-[#1360D2] text-[14px]">Rosoom Payment Gateway</span>
+            </button>
+            <button onClick={() => setPaymentMethod('advance')}
+              className={`w-full bg-white border rounded-xl py-3 flex items-center gap-3 px-3 transition
+                ${paymentMethod === 'advance' ? 'border-[#1360D2]' : 'border-gray-200'}`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <Wallet size={18} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-medium text-[#1360D2] text-[14px]">Pay from Advance Deposit</div>
+                <div className="text-[11px] text-[#6B7280]">
+                  Balance: <span className="font-bold text-[#0E1B3D]"><Dh /> {advanceBalance}</span>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
-        <button onClick={onAdded}
-          className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold shadow uppercase">Add Card</button>
+
+        <button onClick={handleSubmit} disabled={!canSubmit}
+          className={`w-full py-4 rounded-2xl font-bold uppercase tracking-wide text-[14px] flex items-center justify-center gap-2 transition
+            ${canSubmit ? 'dt-btn-primary text-white' : 'bg-[#E7EBF2] text-[#9CA3AF] cursor-not-allowed'}`}>
+          Submit <ArrowRight size={16} />
+        </button>
       </div>
     </BottomSheet>
   );
 }
 
 /* ---------- DDO SEARCH BOTTOM SHEET (initial) ---------- */
+function DDOSearchFlyout({ onClose, onSearch }: { onClose: () => void; onSearch: () => void }) {
+  return (
+    <div className="absolute inset-0 bg-[#0E1B3D]/60 flex items-end z-50" onClick={onClose}>
+      <div className="bg-white w-full rounded-t-3xl shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <div>
+            <div className="text-[#1E2939] font-bold text-lg">Request DDO</div>
+            <div className="text-[#6A7282] text-xs mt-0.5">Search by shipping agent or B/L number</div>
+          </div>
+          <button onClick={onClose}
+            className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4 pb-8">
+          <div>
+            <label className="block text-xs font-bold text-[#364153] uppercase tracking-wide mb-2">Shipping Agent</label>
+            <div className="relative">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input placeholder="Msk T180 s12345"
+                className="w-full bg-[#F8FAFF] border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 outline-none focus:border-[#1360D2] text-[#1E2939] transition-colors" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-[#364153] uppercase tracking-wide mb-2">B/L Number</label>
+            <input placeholder="BOL324565477"
+              className="w-full bg-[#F8FAFF] border border-gray-200 rounded-2xl px-4 py-3.5 outline-none focus:border-[#1360D2] text-[#1E2939] transition-colors" />
+          </div>
+          <div className="flex items-center justify-center gap-1.5 py-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-sm text-[#4A5565]">2 requests available</span>
+          </div>
+          <button onClick={onSearch}
+            className="w-full dt-btn-primary text-white py-4 rounded-2xl font-bold text-[15px] uppercase">
+            Search & Request
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DDOSearchScreen({ onBack, onSearch }: { onBack: () => void; onSearch: () => void }) {
   return (
-    <div className="bg-[#F8FAFF] min-h-full">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] min-h-full">
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white">
           <ChevronLeft size={20} />
         </button>
         <div className="text-white">
-          <div className="font-bold text-lg">Request DDO</div>
+          <div className="font-bold text-xl">Request DDO</div>
         </div>
       </div>
       <BottomSheet title="Search B/L" onClose={onBack}>
@@ -1695,7 +2249,7 @@ function DDOSearchScreen({ onBack, onSearch }: { onBack: () => void; onSearch: (
           <div>
             <label className="block text-sm font-medium text-[#364153] mb-2">Shipping Agent</label>
             <div className="relative">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input placeholder="Msk T180 s12345"
                 className="w-full border border-gray-300 rounded-xl pl-10 pr-4 py-3 outline-none" />
             </div>
@@ -1715,124 +2269,335 @@ function DDOSearchScreen({ onBack, onSearch }: { onBack: () => void; onSearch: (
 }
 
 /* ---------- REQUEST DDO (full form) ---------- */
-function RequestDDO({ onBack, onBLParty, onDDOParty, onDocs, onPay }:
-  { onBack: () => void; onBLParty: () => void; onDDOParty: () => void; onDocs: () => void; onPay: () => void }) {
+const DDO_DATES = [
+  { day: 'Mon', date: '11' }, { day: 'Tue', date: '12' }, { day: 'Wed', date: '13' },
+  { day: 'Thu', date: '14' }, { day: 'Fri', date: '15' }, { day: 'Sat', date: '16' }, { day: 'Sun', date: '17' },
+];
+const DDO_SLOTS = ['8 - 9 AM', '9 - 10 AM', '10 - 11 AM', '11 - 12 AM', '12 - 1 PM', '2 - 3 PM', '3 - 4 PM'];
+
+const BL_TYPE = 'EBL'; // change to 'OBL' to show the appointment section
+
+function RequestDDO({ onBack, onBLParty, onDDOParty, onDocs, onBLDetails, onRequestingParty, onPay }:
+  { onBack: () => void; onBLParty: () => void; onDDOParty: () => void; onDocs: () => void;
+    onBLDetails: () => void; onRequestingParty: () => void; onPay: () => void }) {
+  const [selectedDate, setSelectedDate] = useState('12');
+  const [selectedSlot, setSelectedSlot] = useState('10 - 11 AM');
+
   return (
-    <div className="bg-[#F9FBFF] min-h-full pb-8">
-      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow sticky top-0 z-10">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      {/* Header */}
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white">
           <ChevronLeft size={20} />
         </button>
-        <div className="text-white font-bold text-xl">Request DDO</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-white font-bold text-xl leading-tight">Request DDO</div>
+          <div className="text-white/60 text-xs">BOL324565477</div>
+        </div>
       </div>
-      <div className="p-6 space-y-5">
-        <div className="bg-gradient-to-r from-[#EFF6FF] to-[#EEF2FF] border border-blue-100 rounded-2xl p-5 shadow-sm flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2B7FFF] to-[#155DFC] flex items-center justify-center text-white">
-            <FileText size={26} />
-          </div>
-          <div className="flex-1">
-            <div className="text-xs text-gray-500">Bill of Lading</div>
-            <div className="text-xl font-bold text-[#1E2939]">BOL324565477</div>
-            <button className="mt-2 text-xs font-bold text-[#1E6FFF] border border-[#1E6FFF] rounded-full px-3 py-1">View Details</button>
-          </div>
-        </div>
 
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-[#1360D2]"><Calendar size={20} /></div>
-            <div className="font-medium text-[#364153]">DDO Validity</div>
-          </div>
-          <button className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400">›</button>
-        </div>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 pb-6">
 
-        <div>
-          <div className="font-bold text-lg text-[#1E2939] mb-3">Party Information</div>
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          {/* BOL card — compact */}
+          <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm" style={{ background: 'linear-gradient(135deg,#EFF6FF 0%,#E8F0FE 100%)', border: '1px solid #DBEAFE' }}>
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg,#2B7FFF 0%,#155DFC 100%)' }}>
+              <FileText size={20} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[#1E2939] font-bold text-lg truncate">BOL324565477</div>
+              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                <span className="flex items-center gap-1 text-[#6A7282] text-xs"><FileText size={11} /> EBL</span>
+                <span className="flex items-center gap-1 text-[#6A7282] text-xs"><Ship size={11} /> YM SUCCESS</span>
+                <span className="flex items-center gap-1 text-[#6A7282] text-xs"><Package size={11} /> 0</span>
+              </div>
+            </div>
+            <button onClick={onBLDetails} className="shrink-0 border border-[#1360D2] rounded-full px-2.5 py-1 text-[#1360D2] text-xs font-medium whitespace-nowrap">
+              Details →
+            </button>
+          </div>
+
+          {/* DDO Validity */}
+          <div className="bg-white rounded-2xl shadow-sm">
+            <div className="flex items-center justify-between px-5 py-4">
               <div className="flex items-center gap-3">
-                <div className="w-6 h-7 rounded-full border-2 border-[#155DFC] bg-[#EFF6FF] flex items-center justify-center">
-                  <CheckCircle2 size={14} className="text-[#155DFC]" />
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <Calendar size={20} className="text-[#1360D2]" />
                 </div>
                 <div>
-                  <div className="font-bold text-[#155DFC]">Requesting Party</div>
-                  <div className="text-sm text-gray-600 max-w-[200px]">MAERSK KANOO LLC UNITED DUBAI</div>
+                  <div className="text-[#4A5565] text-[11px] uppercase tracking-wide">DDO Validity</div>
+                  <div className="text-[#1E2939] font-bold text-base">15-12-2023</div>
                 </div>
               </div>
-              <ChevronRight size={18} className="text-gray-400" />
+              <button className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-[#1360D2]">
+                <Plus size={16} />
+              </button>
             </div>
-            <PartyRow label="B/L Party" sub="Tap to add details" onClick={onBLParty} />
-            <PartyRow label="DDO Party" sub="Tap to add details" onClick={onDDOParty} />
-            <PartyRow label="Documents" sub="Tap to upload" onClick={onDocs} last />
           </div>
-        </div>
 
-        <div>
-          <div className="font-bold text-lg text-[#1E2939] mb-3">OBL Drop-Off Appointment</div>
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
-              <button className="text-[#155DFC] font-medium text-sm">‹ Previous</button>
-              <div className="bg-[#EFF6FF] rounded-xl px-4 py-2 flex items-center gap-2 font-bold text-[#1E2939]">
-                <Calendar size={16} /> 12-11-2023
-              </div>
-              <button className="text-[#155DFC] font-medium text-sm">Next ›</button>
+          {/* Party Information */}
+          <div>
+            <div className="font-bold text-[17px] text-[#1E2939] mb-3">Party Information</div>
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-50">
+              {/* Requesting Party — tappable */}
+              <button onClick={onRequestingParty} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <User size={20} className="text-[#1360D2]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[#4A5565] text-[11px] uppercase tracking-wide">Requesting Party</div>
+                  <div className="text-[#1E2939] font-bold text-[15px] truncate">MAERSK KANOO LLC UNITED DUBAI</div>
+                </div>
+                <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                  <Check size={13} className="text-green-600" strokeWidth={3} />
+                </div>
+              </button>
+              {/* B/L Party */}
+              <button onClick={onBLParty} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#E0F2FE' }}>
+                  <FileText size={20} style={{ color: '#0369A1' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[#4A5565] text-[11px] uppercase tracking-wide">B/L Party</div>
+                  <div className="font-bold text-[15px]" style={{ color: '#0369A1' }}>Tap to add details</div>
+                </div>
+                <ChevronRight size={18} className="text-gray-300 shrink-0" />
+              </button>
+              {/* DDO Party */}
+              <button onClick={onDDOParty} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#DBEAFE' }}>
+                  <Truck size={20} style={{ color: '#1E40AF' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[#4A5565] text-[11px] uppercase tracking-wide">DDO Party</div>
+                  <div className="font-bold text-[15px]" style={{ color: '#1E40AF' }}>Tap to add details</div>
+                </div>
+                <ChevronRight size={18} className="text-gray-300 shrink-0" />
+              </button>
+              {/* Documents */}
+              <button onClick={onDocs} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#CFFAFE' }}>
+                  <FileCheck size={20} style={{ color: '#0891B2' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[#4A5565] text-[11px] uppercase tracking-wide">Documents</div>
+                  <div className="font-bold text-[15px]" style={{ color: '#0891B2' }}>Tap to upload</div>
+                </div>
+                <ChevronRight size={18} className="text-gray-300 shrink-0" />
+              </button>
             </div>
-            <div className="text-sm text-[#4A5565] mb-3">Available Slots:</div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { t: '8 - 9 AM' }, { t: '9 - 10 AM' }, { t: '10 - 11 AM', active: true },
-                { t: '11 - 12 AM' }, { t: '12 - 1 PM' }, { t: '2 - 3 PM' },
-                { t: '3 - 4 PM' },
-              ].map(s => (
-                <button key={s.t}
-                  className={`py-4 rounded-xl text-sm font-bold ${s.active
-                    ? 'bg-gradient-to-b from-[#1E6FFF] to-[#155DFC] text-white shadow'
-                    : 'bg-white border border-gray-200 text-[#364153]'}`}>
-                  {s.t}
-                </button>
+          </div>
+
+          {/* OBL Drop-Off Appointment — only if B/L type is OBL */}
+          {BL_TYPE === 'OBL' && (
+            <div>
+              <div className="font-bold text-[17px] text-[#1E2939] mb-3">OBL Drop-Off Appointment</div>
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <div className="px-4 pt-4 pb-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-bold text-[15px] text-[#1E2939]">November 2023</span>
+                    <div className="flex gap-1">
+                      <button className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-[#1360D2]"><ChevronLeft size={14} /></button>
+                      <button className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-[#1360D2]"><ChevronRight size={14} /></button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {DDO_DATES.map(d => {
+                      const active = d.date === selectedDate;
+                      return (
+                        <button key={d.date} onClick={() => setSelectedDate(d.date)}
+                          className={`flex flex-col items-center py-2 rounded-xl transition-all ${active ? 'shadow-md' : 'hover:bg-gray-50'}`}
+                          style={active ? { background: 'linear-gradient(160deg,#1E6FFF 0%,#155DFC 100%)' } : {}}>
+                          <span className={`text-[10px] font-medium mb-1 ${active ? 'text-white/70' : 'text-gray-500'}`}>{d.day}</span>
+                          <span className={`font-bold text-base ${active ? 'text-white' : 'text-[#1E2939]'}`}>{d.date}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="border-t border-gray-50 px-4 py-4">
+                  <div className="text-[#6A7282] text-xs font-medium uppercase tracking-wide mb-3">Available Slots</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {DDO_SLOTS.map(slot => {
+                      const active = slot === selectedSlot;
+                      return (
+                        <button key={slot} onClick={() => setSelectedSlot(slot)}
+                          className={`flex items-center gap-2 rounded-xl py-3 px-4 text-sm font-bold border-2 transition-all ${
+                            active ? 'border-transparent text-white shadow-md' : 'border-gray-100 text-[#364153] bg-white'
+                          }`}
+                          style={active ? { background: 'linear-gradient(90deg,#1E6FFF 0%,#155DFC 100%)' } : {}}>
+                          <Clock size={14} className={active ? 'text-white/70' : 'text-gray-500'} />
+                          {slot}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Invoices */}
+          <div>
+            <div className="flex items-center mb-1">
+              <div className="font-bold text-[17px] text-[#1E2939]">Invoices</div>
+              <span className="ml-auto bg-blue-50 text-[#1360D2] font-bold text-xs rounded-full px-2.5 py-0.5">2 pending</span>
+            </div>
+            <div className="text-xs text-gray-500 mb-3">Credit/Debit Card Online Payments Only, Once User Enter The Request Form</div>
+            <div className="space-y-2">
+              {[{n:'INVSIT10899',a:'100.00',d:'10-11-2023'},{n:'INVSIT10901',a:'200.00',d:'10-11-2023'}].map(i => (
+                <div key={i.n} className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 text-[#1360D2]">
+                    <FileText size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[#1E2939] text-[14px]">{i.n}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-gray-500 text-xs">{i.d}</span>
+                      <span className="bg-orange-50 text-orange-500 font-bold text-[10px] rounded-full px-2 py-0.5">Pending</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-[#1360D2] text-[14px]"><DhAmount value={i.a} /></span>
+                    <button className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+                      <Download size={13} />
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-        </div>
 
-        <div>
-          <div className="font-bold text-lg text-[#1E2939]">Invoices</div>
-          <div className="text-xs text-gray-500 mb-3">Credit/Debit Card Online Payments Only, Once User Enter The Request Form</div>
-          <div className="space-y-2">
-            {[{n:'INVSIT10899', a:'100 AED'},{n:'INVSIT10901', a:'200 AED'}].map(i => (
-              <div key={i.n} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-[#155DFC]"><FileText size={18} /></div>
-                  <div>
-                    <div className="font-bold text-[#1E2939]">{i.n}</div>
-                    <div className="text-sm font-bold text-[#155DFC]">{i.a}</div>
-                  </div>
-                </div>
-                <span className="bg-orange-50 text-orange-600 text-xs font-bold rounded-full px-3 py-1">Pending</span>
+          {/* Payment Breakup */}
+          <div>
+            <div className="font-bold text-[17px] text-[#1E2939] mb-3">Payment Breakup</div>
+            <div className="rounded-2xl p-5 shadow-sm" style={{ background: 'linear-gradient(155deg,#EFF6FF 0%,#EEF2FF 100%)', border: '1px solid #DBEAFE' }}>
+              <div className="flex justify-between items-center py-2.5">
+                <span className="text-[#6A7282]">Invoice Amount</span>
+                <span className="font-bold text-[#1E2939]"><DhAmount value="300.00" /></span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="font-bold text-lg text-[#1E2939] mb-3">Payment Breakups</div>
-          <div className="bg-gradient-to-r from-[#EFF6FF] to-indigo-50 border border-blue-100 rounded-2xl p-5 shadow-sm">
-            <div className="flex justify-between py-1.5">
-              <span className="text-[#364153]">Total Invoice Amount</span>
-              <span className="font-bold text-[#1E2939]">300.00 AED</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-[#364153]">Total Service Charge</span>
-              <span className="font-bold text-[#1E2939]">1.67 AED</span>
-            </div>
-            <div className="border-t border-blue-200 mt-2 pt-3 flex justify-between items-center">
-              <span className="font-bold text-lg text-[#1E2939]">Total Amount</span>
-              <span className="font-bold text-2xl text-[#1E6FFF]">301.67 AED</span>
+              <div className="flex justify-between items-center py-2.5 border-t border-blue-100">
+                <span className="text-[#6A7282]">Service Charge</span>
+                <span className="font-bold text-[#1E2939]"><DhAmount value="1.67" /></span>
+              </div>
+              <div className="flex justify-between items-center pt-3 mt-1 border-t-2 border-blue-200">
+                <span className="font-bold text-[17px] text-[#1E2939]">Total Amount</span>
+                <span className="font-bold text-[26px] text-[#1360D2]"><DhAmount value="301.67" /></span>
+              </div>
             </div>
           </div>
-        </div>
 
+          {/* Remarks */}
+          <div>
+            <div className="font-bold text-[17px] text-[#1E2939] mb-3">Remarks</div>
+            <textarea placeholder="Add any notes or remarks for this request…"
+              className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 text-[#1E2939] text-[15px] outline-none focus:border-[#1360D2] resize-none h-[100px] shadow-sm transition-colors placeholder:text-gray-300" />
+          </div>
+        </div>
+      </div>
+
+      {/* PAY footer — always visible at bottom */}
+      <div className="shrink-0 px-4 pb-6 pt-3 bg-[#F2F5FB] border-t border-gray-100">
         <button onClick={onPay}
-          className="w-full dt-btn-primary text-white py-4 rounded-2xl font-bold shadow uppercase">Pay</button>
+          className="w-full dt-btn-primary text-white rounded-2xl py-4 text-[15px] uppercase font-bold">
+          Proceed to Pay · <DhAmount value="301.67" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- B/L DETAILS SCREEN ---------- */
+const BL_ROWS = [
+  { label: 'B/L Number',         value: 'RIP|1008|' },
+  { label: 'Vessel Name',        value: 'YM SUCCESS' },
+  { label: 'B/L Type',          value: 'EBL' },
+  { label: 'Vessel ETA',        value: '17/04/2023' },
+  { label: 'Requested Date',    value: '01-12-2023 11:17 AM' },
+  { label: 'Voyager Number',    value: '1001' },
+  { label: 'Importer Code',     value: '' },
+  { label: 'Shipping Agent Code', value: 'A180' },
+  { label: 'Shipping Agent Name', value: 'MAERSK KANOO UAE LLC' },
+  { label: 'Container Count',   value: '0' },
+  { label: 'Consignee Name',    value: 'MSK' },
+  { label: 'Vessel ATA',        value: 'A180' },
+  { label: 'Rotation Number',   value: '869088' },
+];
+
+function BLDetailsScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <div className="text-white font-bold text-xl">B/L Details</div>
+          <div className="text-white/70 text-xs">Bill of Lading Information</div>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="divide-y divide-gray-100">
+          {BL_ROWS.map((row, i) => (
+            <div key={row.label} className={`flex items-center justify-between px-6 py-4 ${i % 2 === 0 ? 'bg-[#F1F6FC]' : 'bg-white'}`}>
+              <span className="text-[#0E1B3D] font-medium text-[16px]">{row.label}</span>
+              <span className="text-[#656B81] text-[16px] text-right max-w-[55%]">{row.value || '—'}</span>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-6">
+          <button onClick={onBack}
+            className="w-full dt-btn-secondary font-bold text-[15px] py-3.5 rounded-2xl uppercase">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- REQUESTING PARTY SCREEN (read-only) ---------- */
+function RequestingPartyScreen({ onBack, onContinue }: { onBack: () => void; onContinue: () => void }) {
+  const fields = [
+    { label: 'Party Name',            value: 'MAERSK KANOO LLC UNITED DUBAI', icon: Building2 },
+    { label: 'Representative Person', value: 'AMAR PARDEEP',                  icon: User },
+    { label: 'Email',                 value: 'amar.pardeep@dubaitrade.aet',   icon: Mail },
+    { label: 'Phone Number',          value: '35 45 345355',                  icon: Phone },
+  ];
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow shrink-0">
+        <button onClick={onBack} className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <div className="text-white font-bold text-xl">Requesting Party</div>
+          <div className="text-white/70 text-xs">Party Information</div>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-50">
+          {fields.map(({ label, value, icon: Icon }) => (
+            <div key={label} className="flex items-center gap-4 px-5 py-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <Icon size={18} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[#6A7282] text-[11px] uppercase tracking-wide">{label}</div>
+                <div className="text-[#1E2939] font-semibold text-[15px] mt-0.5">{value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onContinue}
+          className="w-full mt-5 dt-btn-primary text-white font-bold text-[15px] py-3.5 rounded-2xl shadow uppercase">
+          Continue to B/L Party →
+        </button>
+        <button onClick={onBack}
+          className="w-full mt-3 dt-btn-secondary font-bold text-[15px] py-3.5 rounded-2xl uppercase">
+          Back
+        </button>
       </div>
     </div>
   );
@@ -1846,29 +2611,31 @@ function PartyRow({ label, sub, onClick, last }: any) {
         <div className="w-7 h-7 rounded-full border border-gray-300 bg-gray-50" />
         <div className="text-left">
           <div className="font-bold text-[#6A7282]">{label}</div>
-          <div className="text-sm text-gray-400">{sub}</div>
+          <div className="text-sm text-gray-500">{sub}</div>
         </div>
       </div>
-      <ChevronRight size={18} className="text-gray-400" />
+      <ChevronRight size={18} className="text-gray-500" />
     </button>
   );
 }
 
 /* ---------- B/L PARTY ---------- */
-function BLParty({ onBack }: { onBack: () => void }) {
+function BLParty({ onBack, onSave, chainMode }: { onBack: () => void; onSave: () => void; chainMode?: boolean }) {
   return (
     <PartyForm title="B/L Party" subtitle="Bill of Lading Party Information"
-      nameLabel="B/L Party Name" onBack={onBack}>
+      nameLabel="B/L Party Name" onBack={onBack} onSave={onSave} chainMode={chainMode}
+      nextLabel="Continue to DDO Party →">
       <ToggleCheckbox color="blue" label="Same As Requesting Party" />
     </PartyForm>
   );
 }
 
 /* ---------- DDO PARTY ---------- */
-function DDOParty({ onBack }: { onBack: () => void }) {
+function DDOParty({ onBack, onSave, chainMode }: { onBack: () => void; onSave: () => void; chainMode?: boolean }) {
   return (
     <PartyForm title="DDO Party" subtitle="Delivery Order Party Information"
-      nameLabel="DDO Party Name" onBack={onBack}>
+      nameLabel="DDO Party Name" onBack={onBack} onSave={onSave} chainMode={chainMode}
+      nextLabel="Continue to Documents →">
       <ToggleCheckbox color="blue" label="Same As Requesting Party" />
       <ToggleCheckbox color="pink" label="Same As B/L Party" />
     </PartyForm>
@@ -1888,11 +2655,11 @@ function ToggleCheckbox({ color, label }: { color: 'blue'|'pink'; label: string 
   );
 }
 
-function PartyForm({ title, subtitle, nameLabel, onBack, children }: any) {
+function PartyForm({ title, subtitle, nameLabel, onBack, onSave, chainMode, nextLabel, children }: any) {
   return (
-    <div className="bg-[#F8FAFF] min-h-full">
-      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] min-h-full">
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white">
           <ChevronLeft size={20} />
         </button>
         <div className="text-white">
@@ -1907,10 +2674,14 @@ function PartyForm({ title, subtitle, nameLabel, onBack, children }: any) {
         <FormField label="Email" placeholder="Enter email address" icon={Mail} />
         <FormField label="Phone Number" placeholder="Enter phone number" icon={Phone} />
         <div className="pt-2 space-y-3">
+          <button onClick={onSave}
+            className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold uppercase">
+            {chainMode ? (nextLabel ?? 'Save & Continue →') : 'Save and return'}
+          </button>
           <button onClick={onBack}
-            className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold shadow uppercase">Save and return</button>
-          <button onClick={onBack}
-            className="w-full bg-white border border-gray-200 text-[#1360D2] py-3.5 rounded-2xl font-bold shadow uppercase">Cancel</button>
+            className="w-full dt-btn-secondary py-3.5 rounded-2xl font-bold uppercase">
+            {chainMode ? 'Back' : 'Cancel'}
+          </button>
         </div>
       </div>
     </div>
@@ -1922,7 +2693,7 @@ function FormField({ label, placeholder, icon: Icon }: any) {
     <div>
       <label className="block text-sm font-bold text-[#364153] mb-2">{label}</label>
       <div className="relative">
-        <Icon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Icon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
         <input placeholder={placeholder}
           className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-4 outline-none shadow-sm" />
       </div>
@@ -1931,7 +2702,7 @@ function FormField({ label, placeholder, icon: Icon }: any) {
 }
 
 /* ---------- DOCUMENTS ---------- */
-function DDODocuments({ onBack }: { onBack: () => void }) {
+function DDODocuments({ onBack, onSave, chainMode }: { onBack: () => void; onSave?: () => void; chainMode?: boolean }) {
   const docs = [
     { label: 'Authorization Letter', required: true },
     { label: 'B/L Copy' },
@@ -1939,9 +2710,9 @@ function DDODocuments({ onBack }: { onBack: () => void }) {
     { label: 'Other Documents' },
   ];
   return (
-    <div className="bg-[#F9FAFB] min-h-full">
-      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] min-h-full">
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white">
           <ChevronLeft size={20} />
         </button>
         <div className="text-white">
@@ -1960,7 +2731,7 @@ function DDODocuments({ onBack }: { onBack: () => void }) {
                 <div className="font-medium text-[#1E2939]">
                   {d.label}{d.required && <span className="text-red-500 ml-1">*</span>}
                 </div>
-                <div className="text-xs text-gray-400">Tap to upload file</div>
+                <div className="text-xs text-gray-500">Tap to upload file</div>
               </div>
             </div>
             <div className="w-10 h-10 rounded-full bg-blue-50 border-2 border-dashed border-blue-300 flex items-center justify-center text-[#155DFC]">
@@ -1981,12 +2752,806 @@ function DDODocuments({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <div className="pt-2 space-y-3">
+          <button onClick={onSave ?? onBack}
+            className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold uppercase">
+            {chainMode ? 'Save & Return to DDO →' : 'Save and return'}
+          </button>
           <button onClick={onBack}
-            className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold shadow uppercase">Save and return</button>
-          <button onClick={onBack}
-            className="w-full bg-white border border-gray-200 text-[#1360D2] py-3.5 rounded-2xl font-bold shadow uppercase">Cancel</button>
+            className="w-full dt-btn-secondary py-3.5 rounded-2xl font-bold uppercase">
+            {chainMode ? 'Back' : 'Cancel'}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- DDO PAYMENT SCREEN ---------- */
+type DdoPayMethod = 'applepay' | 'rosoom' | 'advance' | 'prepaid';
+
+const APPLE_PAY_LOGO = (
+  <svg width="14" height="17" viewBox="0 0 14 17" fill="currentColor" aria-hidden="true">
+    <path d="M11.182 9.092c-.02-2.07 1.69-3.063 1.768-3.111-.965-1.41-2.464-1.603-2.998-1.625-1.276-.13-2.49.752-3.137.752-.66 0-1.66-.737-2.733-.715-1.404.021-2.701.816-3.42 2.072-1.46 2.527-.373 6.262 1.054 8.314.699 1.005 1.529 2.131 2.616 2.091 1.05-.043 1.447-.679 2.717-.679 1.27 0 1.626.679 2.733.654 1.13-.022 1.844-1.022 2.534-2.031.798-1.165 1.125-2.293 1.144-2.352-.025-.012-2.196-.844-2.218-3.37zM9.222 3.06C9.79 2.36 10.176 1.388 10.07.42c-.83.034-1.836.555-2.424 1.254-.527.617-.988 1.605-.864 2.553.928.071 1.873-.473 2.44-1.166z"/>
+  </svg>
+);
+
+function DDOPaymentScreen({ onBack, onConfirm }: { onBack: () => void; onConfirm: () => void }) {
+  const [selected, setSelected] = useState<DdoPayMethod>('applepay');
+
+  const sel = (id: DdoPayMethod) =>
+    `w-full bg-white border rounded-xl transition-all shadow-sm ${selected === id ? 'border-[#1360D2] shadow-[0_4px_12px_rgba(19,96,210,0.12)]' : 'border-gray-200'}`;
+
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      {/* Header */}
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white">
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <div className="text-white font-bold text-xl">Payment</div>
+          <div className="text-white/60 text-xs">Select payment method</div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 pb-6">
+
+          {/* Amount summary */}
+          <div className="rounded-2xl p-5 shadow-sm" style={{ background: 'linear-gradient(155deg,#EFF6FF 0%,#EEF2FF 100%)', border: '1px solid #DBEAFE' }}>
+            <div className="text-[#4A5565] text-sm font-medium mb-1">Total Amount Due</div>
+            <div className="text-[#1360D2] font-bold text-[32px]"><DhAmount value="301.67" /></div>
+            <div className="mt-3 pt-3 border-t border-blue-100 space-y-1.5">
+              <div className="flex justify-between text-[14px]">
+                <span className="text-[#6A7282]">Invoice Amount</span>
+                <span className="font-bold text-[#1E2939]"><DhAmount value="300.00" /></span>
+              </div>
+              <div className="flex justify-between text-[14px]">
+                <span className="text-[#6A7282]">Service Charge</span>
+                <span className="font-bold text-[#1E2939]"><DhAmount value="1.67" /></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mode of Payment */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[13px] text-[#0E1B3D]">Mode of Payment</span>
+              <span className="bg-gray-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">Default</span>
+            </div>
+
+            {/* Apple Pay */}
+            <button onClick={() => setSelected('applepay')}
+              className={`${sel('applepay')} py-4 flex items-center justify-center gap-2`}>
+              <span className="font-medium text-black">Pay with</span>
+              <span className="inline-flex items-center gap-1 text-black">
+                {APPLE_PAY_LOGO}
+                <span className="font-bold text-lg" style={{ fontFamily: 'system-ui' }}>Pay</span>
+              </span>
+            </button>
+
+            <div className="text-[11px] font-bold text-[#696F83] uppercase tracking-wider">Other Methods</div>
+
+            {/* Rosoom */}
+            <button onClick={() => setSelected('rosoom')}
+              className={`${sel('rosoom')} py-3 px-4 flex items-center gap-3`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <Building2 size={18} className="text-[#1360D2]" />
+              </div>
+              <span className="font-medium text-[#1360D2] text-[14px]">Rosoom Payment Gateway</span>
+            </button>
+
+            {/* Advance Deposit */}
+            <button onClick={() => setSelected('advance')}
+              className={`${sel('advance')} py-3 px-4 flex items-center gap-3`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <Wallet size={18} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-medium text-[#1360D2] text-[14px]">Pay from Advance Deposit</div>
+                <div className="text-[11px] text-[#6B7280]">Balance: <span className="font-bold text-[#0E1B3D]"><Dh /> 77,001.18</span></div>
+              </div>
+            </button>
+
+            {/* Prepaid Card */}
+            <button onClick={() => setSelected('prepaid')}
+              className={`${sel('prepaid')} py-3 px-4 flex items-center gap-3`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <CreditCard size={18} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-medium text-[#1360D2] text-[14px]">Prepaid Card</div>
+                <div className="text-[11px] text-[#6B7280]">Balance: <span className="font-bold text-[#0E1B3D]"><Dh /> 3,500.00</span></div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="shrink-0 px-4 pb-6 pt-3 bg-[#F2F5FB] border-t border-gray-100">
+        <button onClick={onConfirm}
+          className="w-full dt-btn-primary text-white rounded-2xl py-4 text-[15px] uppercase font-bold">
+          Confirm Payment · <DhAmount value="301.67" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- DDO SUCCESS SCREEN ---------- */
+function DDOSuccessScreen({ onDone }: { onDone: () => void }) {
+  const ref = `REF-${Date.now().toString().slice(-8)}`;
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col items-center justify-center px-6" style={{ height: '100%' }}>
+      <div className="w-full max-w-sm flex flex-col items-center text-center gap-6">
+
+        {/* Success ring */}
+        <div className="size-28 rounded-full bg-[#D1FAE5] flex items-center justify-center shadow-[0_8px_32px_rgba(16,185,129,0.25)]">
+          <div className="size-20 rounded-full bg-[#A7F3D0] flex items-center justify-center">
+            <Check size={40} className="text-[#059669]" strokeWidth={2.5} />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[#1E2939] font-bold text-[26px] mb-2">DDO Request Submitted!</div>
+          <div className="text-[#6A7282] text-[15px] leading-relaxed">
+            Your Delivery Order for{' '}
+            <span className="text-[#1360D2] font-bold">BOL324565477</span>{' '}
+            has been submitted successfully.
+          </div>
+        </div>
+
+        {/* Reference card */}
+        <div className="rounded-2xl p-5 w-full text-left shadow-sm" style={{ background: 'linear-gradient(135deg,#EFF6FF 0%,#EEF2FF 100%)', border: '1px solid #DBEAFE' }}>
+          <div className="text-[#6A7282] text-[12px] mb-0.5">Reference Number</div>
+          <div className="text-[#1360D2] font-bold text-[22px]">{ref}</div>
+          <div className="mt-3 pt-3 border-t border-blue-100">
+            <div className="text-[#6A7282] text-[12px] mb-0.5">B/L Number</div>
+            <div className="text-[#1E2939] font-bold text-[16px]">BOL324565477</div>
+          </div>
+        </div>
+
+        <div className="text-[#6A7282] text-[13px] leading-relaxed">
+          You will receive a confirmation email with your DDO details shortly. Track your request status in the DDO records.
+        </div>
+
+        <button onClick={onDone} className="w-full dt-btn-primary text-white rounded-2xl py-4 text-[15px] uppercase font-bold">
+          Back to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- DDO RECORDS SCREEN ---------- */
+const DDO_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  'all':              { label: 'All Records',          color: '#1360D2', bg: '#eff6ff' },
+  'nearing-expiry':   { label: 'Nearing Expiry',       color: '#d67e74', bg: '#fff5f5' },
+  'submitted':        { label: 'Submitted',            color: '#6a7bc7', bg: '#eef2ff' },
+  'pending':          { label: 'Pending',              color: '#d3ab40', bg: '#fffbeb' },
+  'pending-counter':  { label: 'Pending w/ Counter',   color: '#e07d30', bg: '#fff7ed' },
+  'completed':        { label: 'Completed',            color: '#5cb78f', bg: '#f0fdf4' },
+  'rejected':         { label: 'Rejected',             color: '#dc2626', bg: '#fef2f2' },
+  'cancelled':        { label: 'Cancelled',            color: '#6B7280', bg: '#F9FAFB' },
+};
+
+const DDO_ALL_RECORDS = [
+  { bolNumber: 'BOL324565477', referenceNumber: 'REF-12345678', status: 'nearing-expiry', doValidityDate: '15-12-2023' },
+  { bolNumber: 'BOL987654321', referenceNumber: 'REF-87654321', status: 'nearing-expiry', doValidityDate: '18-12-2023' },
+  { bolNumber: 'BOL556677889', referenceNumber: 'REF-55667788', status: 'submitted',      doValidityDate: '22-12-2023' },
+  { bolNumber: 'BOL667788990', referenceNumber: 'REF-66778899', status: 'submitted',      doValidityDate: '23-12-2023' },
+  { bolNumber: 'BOL223344556', referenceNumber: 'REF-22334455', status: 'pending',        doValidityDate: '05-01-2024' },
+  { bolNumber: 'BOL334455667', referenceNumber: 'REF-33445566', status: 'pending',        doValidityDate: '06-01-2024' },
+  { bolNumber: 'BOL445566778', referenceNumber: 'REF-44556677', status: 'pending-counter',doValidityDate: '07-01-2024' },
+  { bolNumber: 'BOL112233111', referenceNumber: 'REF-11223311', status: 'pending-counter',doValidityDate: '08-01-2024' },
+  { bolNumber: 'BOL556677001', referenceNumber: 'REF-55667700', status: 'completed',      doValidityDate: '10-01-2024' },
+  { bolNumber: 'BOL667788112', referenceNumber: 'REF-66778811', status: 'completed',      doValidityDate: '11-01-2024' },
+  { bolNumber: 'BOL778899223', referenceNumber: 'REF-77889922', status: 'rejected',       doValidityDate: '12-01-2024' },
+  { bolNumber: 'BOL889900334', referenceNumber: 'REF-88990033', status: 'cancelled',      doValidityDate: '13-01-2024' },
+];
+
+function DDORecordsScreen({ status, onBack }: { status: string; onBack: () => void }) {
+  const [activeTab, setActiveTab] = useState(status);
+  const [search, setSearch] = useState('');
+  const [searchMode, setSearchMode] = useState<'bol'|'ref'>('bol');
+  const tabs = Object.keys(DDO_STATUS_CFG);
+
+  const ranges = [
+    { k: '7d',     label: 'Last 7 days' },
+    { k: '30d',    label: 'Last 30 days' },
+    { k: '90d',    label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+
+  const fmtD = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+
+  const baseRecords = activeTab === 'all' ? DDO_ALL_RECORDS : DDO_ALL_RECORDS.filter(r => r.status === activeTab);
+  const records = baseRecords.filter(r => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return searchMode === 'bol'
+      ? r.bolNumber.toLowerCase().includes(q)
+      : r.referenceNumber.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="min-h-full flex flex-col" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%), radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%), linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)' }}>
+      {/* Dark blue header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Records</div>
+            <div className="text-[18px] font-bold leading-tight">DDO Records</div>
+          </div>
+        </div>
+        <div className="relative mt-5 flex items-center gap-2">
+          <button onClick={() => { setSearchMode('bol'); setSearch(''); }}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${searchMode === 'bol' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            BOL Number
+          </button>
+          <button onClick={() => { setSearchMode('ref'); setSearch(''); }}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${searchMode === 'ref' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            Reference No.
+          </button>
+          <div className="flex-1 relative flex justify-end">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Floating search bar */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={searchMode === 'bol' ? 'Search by BOL number' : 'Search by reference number'}
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="w-7 h-7 rounded-full bg-[#F4F7FE] flex items-center justify-center text-[#6B7280] mr-1">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Status chips */}
+      <div className="px-5 pt-3 flex items-center gap-1.5 overflow-x-auto">
+        {tabs.map(tab => {
+          const c = DDO_STATUS_CFG[tab];
+          const active = activeTab === tab;
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`shrink-0 h-8 px-3.5 rounded-full text-[11.5px] font-bold whitespace-nowrap transition border ${active ? 'border-transparent' : 'border-[#E0EAFB] bg-white text-[#0E1B3D]'}`}
+              style={active ? { backgroundColor: c.bg, color: c.color, borderColor: c.color + '40' } : {}}>
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      <div className="px-5 pt-5 pb-10 flex-1 space-y-3">
+        {records.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="size-16 rounded-full bg-[#f3f4f6] flex items-center justify-center mx-auto mb-4">
+              <FileText size={28} className="text-[#99a1af]" />
+            </div>
+            <p className="text-[#6a7282] font-medium text-[16px]">No records found</p>
+          </div>
+        ) : records.map((record, idx) => {
+          const rc = DDO_STATUS_CFG[record.status] ?? DDO_STATUS_CFG['all'];
+          return (
+            <div key={idx} className="bg-white rounded-2xl p-5 shadow-sm border border-[#f3f4f6]">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="text-[#1E2939] font-bold text-[16px]">{record.bolNumber}</div>
+                  <div className="text-[#6A7282] text-[12px] mt-0.5">{record.referenceNumber}</div>
+                </div>
+                <span className="rounded-full px-3 py-1 font-bold text-[12px] shrink-0" style={{ backgroundColor: rc.bg, color: rc.color }}>
+                  {rc.label}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-3 border-t border-[#f3f4f6]">
+                <Calendar size={14} className="text-[#6A7282]" />
+                <span className="text-[#4A5565] text-[13px]">DO Validity: <span className="font-bold text-[#1E2939]">{record.doValidityDate}</span></span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Custom date sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                    max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                    min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+            </div>
+            <button
+              disabled={!customFrom || !customTo}
+              onClick={() => {
+                setRange('custom');
+                setCustomLabel(`${fmtD(customFrom)} – ${fmtD(customTo)}`);
+                setShowCustomSheet(false);
+              }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}
+            >
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- CUSTOMS TRACK SCREEN ---------- */
+const CUSTOMS_MOCK = [
+  { decNumber: 'DEC-2023-001234', date: '15-12-2023', status: 'pending',   description: 'Electronic Goods' },
+  { decNumber: 'DEC-2023-001235', date: '16-12-2023', status: 'cleared',   description: 'Textile Products' },
+  { decNumber: 'DEC-2023-001236', date: '17-12-2023', status: 'cancelled', description: 'Machinery Parts' },
+  { decNumber: 'DEC-2023-001237', date: '18-12-2023', status: 'pending',   description: 'Food Items' },
+  { decNumber: 'DEC-2023-001238', date: '19-12-2023', status: 'cleared',   description: 'Auto Parts' },
+  { decNumber: 'DEC-2023-001239', date: '20-12-2023', status: 'pending',   description: 'Chemical Products' },
+  { decNumber: 'DEC-2023-001240', date: '21-12-2023', status: 'cleared',   description: 'Steel Products' },
+  { decNumber: 'DEC-2023-001241', date: '22-12-2023', status: 'cancelled', description: 'Plastic Materials' },
+];
+const CUSTOMS_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  pending:   { label: 'Pending',   color: '#d3ab40', bg: '#fffbeb' },
+  cleared:   { label: 'Cleared',   color: '#5cb78f', bg: '#f0fdf4' },
+  cancelled: { label: 'Cancelled', color: '#6B7280', bg: '#F9FAFB' },
+};
+
+function CustomsTrackScreen({ onBack }: { onBack: () => void }) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'cleared' | 'cancelled'>('all');
+
+  const ranges = [
+    { k: '7d',     label: 'Last 7 days' },
+    { k: '30d',    label: 'Last 30 days' },
+    { k: '90d',    label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+
+  const fmtD = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+
+  const filtered = CUSTOMS_MOCK.filter(r =>
+    r.decNumber.toLowerCase().includes(search.toLowerCase()) &&
+    (statusFilter === 'all' || r.status === statusFilter)
+  );
+
+  return (
+    <div className="min-h-full flex flex-col" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%), radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%), linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)' }}>
+      {/* Dark blue header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Customs</div>
+            <div className="text-[18px] font-bold leading-tight">Customs Declaration</div>
+          </div>
+        </div>
+        <div className="relative mt-5 flex items-center gap-2">
+          <div>
+            <div className="text-[28px] font-bold leading-none">{CUSTOMS_MOCK.length}</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mt-0.5">DECLARATIONS</div>
+          </div>
+          <div className="ml-auto relative">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Floating search bar */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search declaration number"
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="w-7 h-7 rounded-full bg-[#F4F7FE] flex items-center justify-center text-[#6B7280] mr-1">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Status chips */}
+      <div className="px-5 pt-3 flex items-center gap-1.5 flex-wrap">
+        {(['all', 'pending', 'cleared', 'cancelled'] as const).map(s => {
+          const active = statusFilter === s;
+          const label = s === 'all' ? 'All' : CUSTOMS_STATUS[s]?.label ?? s;
+          return (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`h-8 px-3.5 rounded-full text-[11.5px] font-bold whitespace-nowrap transition border ${
+                active
+                  ? 'bg-[#1360D2] border-transparent text-white shadow-[0_6px_14px_-8px_rgba(19,96,210,0.6)]'
+                  : 'bg-white border-[#E0EAFB] text-[#0E1B3D]'}`}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      <div className="px-5 pt-5 pb-10 flex-1 space-y-3">
+        {filtered.map((r, i) => {
+          const sc = CUSTOMS_STATUS[r.status];
+          return (
+            <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-[#f3f4f6] flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <FileText size={20} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-[#1E2939] text-[15px]">{r.decNumber}</div>
+                <div className="flex items-center gap-1 mt-1 text-[#4A5565] text-[11px]">
+                  <Calendar size={11} />{r.date}
+                </div>
+              </div>
+              <span className="rounded-full px-2.5 py-1 font-bold text-[11px] shrink-0" style={{ backgroundColor: sc.bg, color: sc.color }}>
+                {sc.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Custom date sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                    max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                    min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+            </div>
+            <button
+              disabled={!customFrom || !customTo}
+              onClick={() => {
+                setRange('custom');
+                setCustomLabel(`${fmtD(customFrom)} – ${fmtD(customTo)}`);
+                setShowCustomSheet(false);
+              }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}
+            >
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- GATE PASS LIST SCREEN ---------- */
+const GATEPASS_MOCK_DECL = [
+  { decNumber: 'BOL-101-805852323-10', date: '20-11-2023', gatePassCount: 2 },
+  { decNumber: 'BOL-101-805852323-11', date: '21-11-2023', gatePassCount: 0 },
+  { decNumber: 'BOL-101-805852323-12', date: '22-11-2023', gatePassCount: 1 },
+  { decNumber: 'BOL-101-805852323-13', date: '23-11-2023', gatePassCount: 0 },
+];
+
+function GatePassListScreen({ onBack, onSelect }: { onBack: () => void; onSelect: () => void }) {
+  const [search, setSearch] = useState('');
+  const [passFilter, setPassFilter] = useState<'active'|'all'>('active');
+  const ranges = [
+    { k: '7d',  label: 'Last 7 days' },
+    { k: '30d', label: 'Last 30 days' },
+    { k: '90d', label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+  const fmtD = (iso: string) => {
+    if (!iso) return '';
+    const [, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+
+  const filtered = GATEPASS_MOCK_DECL.filter(r =>
+    (!search || r.decNumber.toLowerCase().includes(search.toLowerCase())) &&
+    (passFilter === 'all' || r.gatePassCount > 0)
+  );
+
+  return (
+    <div className="min-h-full flex flex-col" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%), radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%), linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)' }}>
+      {/* Dark blue header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Cargo Management</div>
+            <div className="text-[18px] font-bold leading-tight">Gate Pass</div>
+          </div>
+        </div>
+        <div className="relative mt-5 flex items-center gap-2">
+          <button onClick={() => setPassFilter('active')}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${passFilter === 'active' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            Active Pass
+          </button>
+          <button onClick={() => setPassFilter('all')}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${passFilter === 'all' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            All
+          </button>
+          <div className="flex-1 relative flex justify-end">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Floating search bar */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search declaration number"
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="w-7 h-7 rounded-full bg-[#F4F7FE] flex items-center justify-center text-[#6B7280] mr-1">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Records */}
+      <div className="px-5 pt-5 pb-10 flex-1 space-y-3">
+        {filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-14 h-14 rounded-2xl bg-[#EAF1FE] flex items-center justify-center mx-auto mb-3">
+              <FileCheck size={24} className="text-[#1360D2]" />
+            </div>
+            <p className="text-[#6A7282] font-medium text-[15px]">No gate passes found</p>
+          </div>
+        ) : filtered.map((r, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-sm border border-[#EAF0FA] overflow-hidden">
+            <button onClick={onSelect} className="w-full p-4 flex items-center gap-4 text-left hover:bg-[#F8FAFF] transition-all">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <FileCheck size={20} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-[#1E2939] text-[15px]">{r.decNumber}</div>
+                <div className="flex items-center gap-1 mt-0.5 text-[#6A7282] text-[12px]">
+                  <Calendar size={11} />{r.date}
+                </div>
+              </div>
+              {r.gatePassCount > 0 ? (
+                <span className="bg-blue-50 text-[#1360D2] font-bold text-[12px] rounded-full px-2.5 py-1 shrink-0">{r.gatePassCount} gate pass{r.gatePassCount > 1 ? 'es' : ''}</span>
+              ) : (
+                <span className="bg-gray-100 text-[#6A7282] font-bold text-[12px] rounded-full px-2.5 py-1 shrink-0">No gate pass</span>
+              )}
+              <ChevronRight size={16} className="text-gray-300 shrink-0" />
+            </button>
+            {passFilter === 'active' && r.gatePassCount > 0 && (
+              <div className="border-t border-[#EAF0FA] px-4 py-2.5 flex items-center justify-between">
+                <span className="text-[#6A7282] text-[12px]">Gate pass available to download</span>
+                <button
+                  onClick={e => { e.stopPropagation(); }}
+                  className="flex items-center gap-1.5 bg-[#EAF1FE] hover:bg-[#DBEAFE] text-[#1360D2] text-[12px] font-bold px-3 py-1.5 rounded-xl transition-colors">
+                  <Download size={13} />
+                  Download
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Custom date sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+            </div>
+            <button disabled={!customFrom || !customTo}
+              onClick={() => { setRange('custom'); setCustomLabel(`${fmtD(customFrom)} – ${fmtD(customTo)}`); setShowCustomSheet(false); }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}>
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2015,62 +3580,310 @@ function PaySuccessModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* ---------- PREPAID CARD CREATED — confirmation popup ---------- */
+function DeletePrepaidCardModal({ cardNumber, onCancel, onConfirm }:
+  { cardNumber: string; onCancel: () => void; onConfirm: () => void }) {
+  const last4 = cardNumber.slice(-4);
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center px-5"
+      style={{ background: 'rgba(7, 16, 38, 0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+      <div className="dt-pop relative w-full max-w-sm bg-white rounded-[28px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(7,16,38,0.55)] p-6 text-center">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-[#FEECEC] flex items-center justify-center text-[#B42318]">
+          <Trash2 size={24} />
+        </div>
+        <div className="mt-4 text-[20px] font-bold leading-snug text-[#0E1B3D]">Delete prepaid card?</div>
+        <div className="mt-1.5 text-[13.5px] text-[#4A5565] leading-relaxed">
+          Card ending in <span className="font-bold text-[#0E1B3D]">{last4}</span> will be permanently removed.
+          Any remaining balance will be refunded to your Advance Deposit.
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2.5">
+          <button onClick={onCancel}
+            className="dt-btn-secondary py-3 rounded-2xl font-bold text-[13px] uppercase tracking-wide">
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            className="py-3 rounded-2xl font-bold text-[13px] uppercase tracking-wide text-white"
+            style={{ background: 'linear-gradient(90deg, #B91C1C, #DC2626 50%, #EF4444)', boxShadow: '0 12px 24px -10px rgba(220,38,38,0.45)' }}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrepaidCardCreatedModal({ amount, cardNumber, onClose }:
+  { amount: string; cardNumber: string; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center px-5"
+      style={{ background: 'rgba(7, 16, 38, 0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+      <div className="dt-pop relative w-full max-w-sm bg-white rounded-[28px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(7,16,38,0.55)]">
+        {/* Blue hero with new card */}
+        <div className="relative overflow-hidden px-5 pt-6 pb-5"
+          style={{ background: 'linear-gradient(180deg, #DBEAFE 0%, #FFFFFF 100%)' }}>
+          <div className="absolute -top-16 -right-16 w-44 h-44 rounded-full opacity-30 blur-3xl" style={{ background: '#1360D2' }} />
+          <div className="absolute -bottom-12 -left-10 w-40 h-40 rounded-full opacity-20 blur-3xl" style={{ background: '#6FA0FF' }} />
+          <div className="relative rounded-2xl text-white p-4 shadow-[0_18px_36px_-18px_rgba(14,27,61,0.4)]"
+            style={{ background: 'linear-gradient(135deg, #0E47A6 0%, #1360D2 50%, #2950E5 100%)' }}>
+            <div className="flex items-center justify-between">
+              <CreditCard size={22} />
+              <div className="text-[10px] uppercase tracking-wider font-bold text-white/75">Prepaid Card</div>
+            </div>
+            <div className="mt-3 text-[16px] tracking-[0.18em] font-mono">{cardNumber}</div>
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-wider text-white/70 font-bold">Balance</div>
+              <div className="text-[18px] font-bold mt-0.5 flex items-center gap-0.5">
+                <Dh /> {amount}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Copy */}
+        <div className="px-6 pt-3 pb-5 text-center">
+          <div className="mx-auto -mt-10 mb-2 relative w-14 h-14 rounded-full flex items-center justify-center text-white shadow-[0_10px_24px_-8px_rgba(15,143,106,0.55),0_0_0_4px_#fff]"
+            style={{ background: 'linear-gradient(135deg, #10B981 0%, #0F8F6A 100%)' }}>
+            <CheckCircle2 size={32} strokeWidth={2.5} />
+          </div>
+          <div className="text-[20px] font-bold leading-snug text-[#0E1B3D]">Card created successfully</div>
+          <div className="mt-1.5 text-[13.5px] text-[#4A5565] leading-relaxed">
+            Your new prepaid card is ready to use.<br />
+            We've sent the PIN code via SMS to your registered mobile.
+          </div>
+
+          <div className="mt-5 space-y-2.5">
+            <button onClick={onClose}
+              className="dt-btn-primary w-full text-white py-3.5 rounded-2xl font-bold text-[14px] flex items-center justify-center gap-2 uppercase tracking-wide">
+              Go to dashboard <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- IMPORT FCL BILLS LIST ---------- */
 function ImportFCL({ onBack, onPickBill }: { onBack: () => void; onPickBill: () => void }) {
-  const bills = Array.from({ length: 6 }, (_, i) => ({
-    id: `101-805852323-${10 + i}`, date: '25-05-2025', containers: 10,
-  }));
+  type FCLBill = { id: string; date: string; containers: number; amount: string };
+  const bills: FCLBill[] = [
+    { id: '101-805852323-10', date: '25 May 2025', containers: 10, amount: '12,450.00' },
+    { id: '101-805852323-11', date: '24 May 2025', containers:  8, amount: '9,810.50'  },
+    { id: '101-805852323-12', date: '23 May 2025', containers: 12, amount: '15,200.00' },
+    { id: '101-805852323-13', date: '22 May 2025', containers:  4, amount: '4,825.75'  },
+    { id: '101-805852323-14', date: '20 May 2025', containers:  6, amount: '7,160.00'  },
+    { id: '101-805852323-15', date: '18 May 2025', containers: 14, amount: '17,540.93' },
+  ];
+  const ranges = [
+    { k: '7d',  label: 'Last 7 days' },
+    { k: '30d', label: 'Last 30 days' },
+    { k: '90d', label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+  const [query, setQuery] = useState('');
+
+  const fmtDate = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+  const filtered = bills.filter(b => !query || b.id.toLowerCase().includes(query.toLowerCase()));
+  const totalDue = filtered.reduce((s, b) => s + parseFloat(b.amount.replace(/,/g, '')), 0);
+  const totalContainers = filtered.reduce((s, b) => s + b.containers, 0);
+
   return (
-    <div className="bg-[#F8FAFF] min-h-full">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
-          <ChevronLeft size={20} />
-        </button>
-        <div className="text-white">
-          <div className="font-medium">Import FCL</div>
-          <div className="text-xs opacity-50">Pending Bills</div>
+    <div className="min-h-full flex flex-col"
+      style={{
+        background:
+          'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%),' +
+          'radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%),' +
+          'linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)',
+      }}>
+      {/* Header with embedded summary card */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Payments</div>
+            <div className="text-[18px] font-bold leading-tight">Import FCL Bills</div>
+          </div>
+        </div>
+        <div className="relative mt-5 flex items-center gap-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/65 font-bold">Declarations</div>
+            <div className="text-[32px] font-bold leading-none mt-1">{bills.length}</div>
+          </div>
+          <div className="w-px h-10 bg-white/20" />
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/65 font-bold">Containers</div>
+            <div className="text-[32px] font-bold leading-none mt-1">{bills.reduce((s, b) => s + b.containers, 0)}</div>
+          </div>
+          <div className="ml-auto relative">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-      <div className="p-4 space-y-5">
-        <div className="bg-white border border-gray-200 rounded-xl p-2.5 flex items-center gap-2">
-          <Search size={18} className="text-gray-400" />
-          <span className="text-sm text-[#696F83]">Search services...</span>
-        </div>
-        <div>
-          <div className="flex items-center justify-end gap-1 text-[#1360D2] text-sm font-medium mb-3">
-            <ArrowRight size={14} className="-rotate-90" />
-            Recent Bills
+
+      {/* Search + date range — floating bar overlapping header */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search declaration number"
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
           </div>
-          <div className="space-y-3">
-            {bills.map(b => (
-              <button key={b.id} onClick={onPickBill}
-                className="w-full bg-white rounded-2xl p-4 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-[#1360D2]">
-                    <FileText size={20} />
+        </div>
+      </div>
+
+      <div className="px-5 pt-5 pb-10 flex-1 space-y-3">
+        {/* Sub-header */}
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] uppercase tracking-wider text-[#0E47A6] font-bold">Pending declarations</div>
+          <div className="text-[11px] text-[#6B7280]">Sorted by latest</div>
+        </div>
+
+        {/* Bill list — premium cards */}
+        <div className="space-y-3">
+          {filtered.map(b => (
+            <button key={b.id} onClick={onPickBill}
+              className="group relative w-full bg-white rounded-2xl border border-[#EAF0FA] shadow-[0_8px_18px_-14px_rgba(14,27,61,0.18)] hover:border-[#B7CDF1] hover:shadow-[0_16px_28px_-18px_rgba(19,96,210,0.35)] transition-all text-left p-4 overflow-hidden">
+              {/* Left accent stripe */}
+              <div className="absolute left-0 top-4 bottom-4 w-1 rounded-r-full"
+                style={{ background: 'linear-gradient(180deg, #1360D2, #2950E5)' }} />
+
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-[#1360D2]"
+                  style={{ background: 'linear-gradient(135deg, #EAF1FE, #DCE7FB)' }}>
+                  <FileText size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <div className="text-[14.5px] font-bold text-[#0E1B3D] truncate tracking-tight">{b.id}</div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-[#0E1B3D] text-sm">{b.id}</span>
-                      <span className="bg-orange-50 text-[#F9A83D] text-[10px] font-bold rounded-full px-2 py-0.5">PENDING</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5 text-xs text-[#696F83]">
-                      <Calendar size={14} className="opacity-75" />
-                      {b.date}
-                      <span>|</span>
-                      <span>{b.containers} Containers</span>
-                    </div>
+                  <div className="mt-1 flex items-center gap-2 text-[11.5px] text-[#6B7280]">
+                    <span className="inline-flex items-center gap-1"><Calendar size={11} className="text-[#1360D2]" /> {b.date}</span>
+                    <span className="text-[#C9D2DE]">·</span>
+                    <span className="inline-flex items-center gap-1"><Package size={11} className="text-[#1360D2]" /> {b.containers}</span>
                   </div>
                 </div>
-                <ChevronRight size={18} className="text-gray-400" />
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center justify-center gap-1 mt-4 text-[#1360D2] font-medium text-sm">
-            View More <ChevronRight size={16} className="rotate-90" />
-          </div>
+                <div className="text-right shrink-0">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase tracking-wider"
+                    style={{ background: '#FEF6E7', color: '#B45309', border: '1px solid #FCD9A5' }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#F59E0B' }} />
+                    Pending
+                  </span>
+                  <div className="text-[16px] font-bold text-[#0E1B3D] mt-1.5 flex items-center justify-end gap-0.5">
+                    <Dh /> {b.amount}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="bg-white rounded-2xl border border-[#EAF0FA] py-10 px-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-[#EAF1FE] mx-auto flex items-center justify-center text-[#1360D2]">
+                <FileText size={20} />
+              </div>
+              <div className="mt-3 text-[13.5px] font-bold text-[#0E1B3D]">No declarations found</div>
+              <div className="mt-1 text-[12px] text-[#6B7280]">Try a different search term or date range.</div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Custom date range bottom sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={e => setCustomFrom(e.target.value)}
+                    max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={e => setCustomTo(e.target.value)}
+                    min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+            <button
+              disabled={!customFrom || !customTo}
+              onClick={() => {
+                setRange('custom');
+                setCustomLabel(`${fmtDate(customFrom)} – ${fmtDate(customTo)}`);
+                setShowCustomSheet(false);
+              }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}
+            >
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2167,7 +3980,7 @@ function GatePass({ onBack, onPick }: { onBack: () => void; onPick: () => void }
       </div>
       <div className="p-4 space-y-4">
         <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2">
-          <Search size={18} className="text-gray-400" />
+          <Search size={18} className="text-gray-500" />
           <span className="text-sm text-[#696F83]">Search</span>
         </div>
         <div>
@@ -2195,7 +4008,7 @@ function GatePass({ onBack, onPick }: { onBack: () => void; onPick: () => void }
                 </div>
               </div>
               {p.withChevron ? (
-                <ChevronRight size={18} className="text-gray-400" />
+                <ChevronRight size={18} className="text-gray-500" />
               ) : (
                 <span className="flex items-center gap-1.5 text-[#3F7DE0] font-semibold text-xs">
                   <Download size={16} /> Download
@@ -2213,96 +4026,229 @@ function GatePass({ onBack, onPick }: { onBack: () => void; onPick: () => void }
 }
 
 /* ---------- GATE PASS DETAILS ---------- */
-function GatePassDetails({ vehicles, onBack, onAddVehicle, onViewDetails, onRemoveVehicle, onPay }:
-  { vehicles: Array<{ plate: string; qty: number }>; onBack: () => void; onAddVehicle: () => void;
-    onViewDetails: () => void; onRemoveVehicle: (i: number) => void; onPay: () => void }) {
-  const total = vehicles.length > 0 ? 18 : 0;
-  const vat = vehicles.length > 0 ? 20 : 0;
-  const due = total + vat;
+function GatePassDetails({ vehicles, onBack, onAddVehicle, onViewDetails, onViewProducts, onRemoveVehicle, onPay }: any) {
+  const totalAmount = vehicles.length * 18;
+  const vatAmount = vehicles.length * 20;
+
   return (
-    <div className="bg-[#F8FAFF] min-h-full pb-8">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
           <ChevronLeft size={20} />
         </button>
-        <div className="text-white font-medium">Gate Pass Details</div>
+        <div>
+          <div className="text-white font-bold text-xl">Gate Pass Details</div>
+          <div className="text-white/60 text-xs">BOL 101-805852323-10</div>
+        </div>
       </div>
-      <div className="p-4 space-y-5">
-        <div className="bg-gradient-to-r from-[#EFF6FF] to-[#EEF2FF] border border-blue-100 rounded-2xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#1360D2] flex items-center justify-center text-white"><ClipboardList size={22} /></div>
-            <div>
-              <div className="font-bold text-[#0E1B3D]">BOL <span className="font-bold">101-805852323-10</span></div>
-              <div className="flex items-center gap-3 text-sm text-[#696F83] mt-1">
-                <span>Gate Pass Type</span>
-                <span className="flex items-center gap-1"><CheckCircle2 size={16} className="text-[#14C9A9]" /> IN</span>
-                <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full border-2 border-gray-300 inline-block" /> Out</span>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 pb-6">
+          {/* BOL card */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-[#f3f4f6]">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-11 h-11 rounded-xl bg-[#1360D2] flex items-center justify-center shrink-0">
+                <FileCheck size={20} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-[#1E2939] text-[15px]">BOL 101-805852323-10</div>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[#6A7282] text-[12px]">Gate Pass Type</span>
+                  <span className="flex items-center gap-1 text-[12px] font-bold text-[#5cb78f]">
+                    <div className="w-4 h-4 rounded-full bg-[#5cb78f] flex items-center justify-center"><Check size={10} className="text-white" strokeWidth={3}/></div>
+                    IN
+                  </span>
+                  <span className="flex items-center gap-1 text-[12px] font-medium text-[#6A7282]">
+                    <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                    Out
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-          <button onClick={onViewDetails}
-            className="mt-3 text-[#1360D2] font-bold text-sm border border-[#1360D2] rounded-full px-4 py-1.5">View Details</button>
-        </div>
-
-        <div>
-          <div className="font-bold text-[#0E1B3D] mb-3">Vehicle Information</div>
-          {vehicles.length === 0 ? (
-            <div className="flex flex-col items-center text-center py-6 gap-3">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400"><Truck size={22} /></div>
-              <div className="font-bold text-[#0E1B3D]">No Vehicle Added Yet</div>
-              <div className="text-sm text-[#696F83] max-w-[260px]">You can add vehicles for your declaration to start transporting your products</div>
-              <button onClick={onAddVehicle}
-                className="mt-2 inline-flex items-center gap-1.5 border border-[#1360D2] text-[#1360D2] font-bold rounded-full px-4 py-2 text-sm">
-                <Plus size={16} /> Add Vehicle
+            <div className="flex gap-4 mt-1">
+              <button onClick={onViewDetails} className="flex items-center gap-1.5 text-[#1360D2] text-[13px] font-semibold">
+                <Info size={14} className="shrink-0" /> View Details
+              </button>
+              <button onClick={onViewProducts} className="flex items-center gap-1.5 text-[#1360D2] text-[13px] font-semibold">
+                <Info size={14} className="shrink-0" /> Product Details
               </button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {vehicles.map((v, i) => (
-                <div key={i} className="bg-white rounded-2xl p-3 shadow-sm flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-[#1360D2]"><Truck size={18} /></div>
-                    <div>
-                      <div className="font-bold text-[#0E1B3D]">{v.plate}</div>
-                      <div className="text-xs text-[#696F83]">Total Quantity <span className="text-[#0E1B3D] font-medium">{v.qty}</span></div>
-                    </div>
-                  </div>
-                  <button onClick={() => onRemoveVehicle(i)} className="w-9 h-9 rounded-lg flex items-center justify-center text-red-500">
-                    <Trash2 size={18} />
-                  </button>
+          </div>
+
+          {/* Vehicle Information */}
+          <div>
+            <div className="font-bold text-[17px] text-[#1E2939] mb-3">Vehicle Information</div>
+            {vehicles.length === 0 ? (
+              <div className="bg-white rounded-2xl p-6 shadow-sm flex flex-col items-center text-center gap-3">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+                  <Truck size={28} className="text-[#D1D5DC]" />
                 </div>
-              ))}
-              <div className="flex justify-center pt-2">
+                <div>
+                  <div className="font-bold text-[#1E2939] text-[15px]">No Vehicle Added Yet</div>
+                  <div className="text-[#6A7282] text-[13px] mt-1">You can add vehicles for your declaration to start transporting your products</div>
+                </div>
                 <button onClick={onAddVehicle}
-                  className="inline-flex items-center gap-1.5 border border-[#1360D2] text-[#1360D2] font-bold rounded-full px-4 py-2 text-sm">
+                  className="flex items-center gap-2 border border-[#1360D2] text-[#1360D2] rounded-xl px-5 py-2.5 font-bold text-[14px]">
                   <Plus size={16} /> Add Vehicle
                 </button>
               </div>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="space-y-2">
+                {vehicles.map((v: any, i: number) => (
+                  <div key={i} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3 border border-[#f3f4f6]">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                      <Truck size={18} className="text-[#1360D2]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-[#1E2939] text-[14px]">{v.plate}</div>
+                      <div className="text-[#6A7282] text-[12px]">Total Quantity {v.qty}</div>
+                    </div>
+                    <button onClick={() => onRemoveVehicle(i)} className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                <button onClick={onAddVehicle}
+                  className="w-full flex items-center justify-center gap-2 border border-[#1360D2] text-[#1360D2] rounded-2xl py-3 font-bold text-[14px] bg-white">
+                  <Plus size={16} /> Add Vehicle
+                </button>
+              </div>
+            )}
+          </div>
 
-        <div>
-          <div className="font-bold text-[#0E1B3D] mb-3">Payment Details</div>
-          <div className="bg-[#EFF6FF] rounded-xl p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-[#696F83]">Total Amount</span>
-              <span className="font-medium text-[#0E1B3D]"><Dh /> {total === 0 ? '0' : total + '.00'}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-[#696F83]">VAT Amount</span>
-              <span className="font-medium text-[#0E1B3D]"><Dh /> {vat === 0 ? '0' : vat + '.00'}</span>
-            </div>
-            <div className="border-t border-[#BEDBFF] mt-1 pt-2 flex justify-between items-center">
-              <span className="font-bold text-[#0E1B3D]">Total Due</span>
-              <span className="font-bold text-[#1360D2]"><Dh /> {due === 0 ? '0' : due + '.00'}</span>
+          {/* Payment Details */}
+          <div>
+            <div className="font-bold text-[17px] text-[#1E2939] mb-3">Payment Details</div>
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 bg-[#F8FAFF]">
+                <span className="text-[#4A5565] text-[14px]">Total Amount</span>
+                <span className="font-bold text-[#1E2939] text-[14px]"><Dh /> {totalAmount}.00</span>
+              </div>
+              <div className="flex items-center justify-between px-5 py-3.5">
+                <span className="text-[#4A5565] text-[14px]">VAT Amount</span>
+                <span className="font-bold text-[#1E2939] text-[14px]"><Dh /> {vatAmount}.00</span>
+              </div>
+              <div className="flex items-center justify-between px-5 py-4 border-t-2 border-[#F2F5FB]">
+                <span className="font-bold text-[#1E2939] text-[16px]">Total Due</span>
+                <span className="font-bold text-[#1360D2] text-[18px]"><Dh /> {totalAmount + vatAmount}.00</span>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <button onClick={onPay} disabled={vehicles.length === 0}
-          className={`w-full py-4 rounded-2xl font-bold text-white ${vehicles.length === 0 ? 'bg-[#1360D2]/60' : 'bg-[#1360D2] shadow'}`}>
-          Pay & Submit
+      <div className="shrink-0 px-4 pb-6 pt-3 bg-[#F2F5FB] border-t border-gray-100">
+        <button onClick={onPay}
+          className="w-full dt-btn-primary text-white rounded-2xl py-4 font-bold text-[15px] uppercase">
+          Pay &amp; Submit
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- GATE PASS PAYMENT ---------- */
+type GatePassPayMethod = 'applepay' | 'rosoom' | 'advance' | 'prepaid';
+
+function GatePassPayment({ amount, onBack, onConfirm }: { amount: number; onBack: () => void; onConfirm: () => void }) {
+  const [selected, setSelected] = useState<GatePassPayMethod>('applepay');
+
+  const sel = (id: GatePassPayMethod) =>
+    `w-full bg-white border rounded-xl transition-all shadow-sm ${selected === id ? 'border-[#1360D2] shadow-[0_4px_12px_rgba(19,96,210,0.12)]' : 'border-gray-200'}`;
+
+  const gatePassFee = +(amount * 0.952).toFixed(2);
+  const vat = +(amount * 0.048).toFixed(2);
+
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white">
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <div className="text-white font-bold text-xl">Payment</div>
+          <div className="text-white/60 text-xs">Select payment method</div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 pb-6">
+
+          {/* Amount summary */}
+          <div className="rounded-2xl p-5 shadow-sm" style={{ background: 'linear-gradient(155deg,#EFF6FF 0%,#EEF2FF 100%)', border: '1px solid #DBEAFE' }}>
+            <div className="text-[#4A5565] text-sm font-medium mb-1">Total Amount Due</div>
+            <div className="text-[#1360D2] font-bold text-[32px]"><Dh /> {amount.toFixed(2)}</div>
+            <div className="mt-3 pt-3 border-t border-blue-100 space-y-1.5">
+              <div className="flex justify-between text-[14px]">
+                <span className="text-[#6A7282]">Gate Pass Fee</span>
+                <span className="font-bold text-[#1E2939]"><Dh /> {gatePassFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-[14px]">
+                <span className="text-[#6A7282]">VAT (5%)</span>
+                <span className="font-bold text-[#1E2939]"><Dh /> {vat.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mode of Payment */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[13px] text-[#0E1B3D]">Mode of Payment</span>
+              <span className="bg-gray-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">Default</span>
+            </div>
+
+            {/* Apple Pay */}
+            <button onClick={() => setSelected('applepay')}
+              className={`${sel('applepay')} py-4 flex items-center justify-center gap-2`}>
+              <span className="font-medium text-black">Pay with</span>
+              <span className="inline-flex items-center gap-1 text-black">
+                {APPLE_PAY_LOGO}
+                <span className="font-bold text-lg" style={{ fontFamily: 'system-ui' }}>Pay</span>
+              </span>
+            </button>
+
+            <div className="text-[11px] font-bold text-[#696F83] uppercase tracking-wider">Other Methods</div>
+
+            {/* Rosoom */}
+            <button onClick={() => setSelected('rosoom')}
+              className={`${sel('rosoom')} py-3 px-4 flex items-center gap-3`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <Building2 size={18} className="text-[#1360D2]" />
+              </div>
+              <span className="font-medium text-[#1360D2] text-[14px]">Rosoom Payment Gateway</span>
+            </button>
+
+            {/* Advance Deposit */}
+            <button onClick={() => setSelected('advance')}
+              className={`${sel('advance')} py-3 px-4 flex items-center gap-3`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <Wallet size={18} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-medium text-[#1360D2] text-[14px]">Pay from Advance Deposit</div>
+                <div className="text-[11px] text-[#6B7280]">Balance: <span className="font-bold text-[#0E1B3D]"><Dh /> 77,001.18</span></div>
+              </div>
+            </button>
+
+            {/* Prepaid Card */}
+            <button onClick={() => setSelected('prepaid')}
+              className={`${sel('prepaid')} py-3 px-4 flex items-center gap-3`}>
+              <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                <CreditCard size={18} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-medium text-[#1360D2] text-[14px]">Prepaid Card</div>
+                <div className="text-[11px] text-[#6B7280]">Balance: <span className="font-bold text-[#0E1B3D]"><Dh /> 3,500.00</span></div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="shrink-0 px-4 pb-6 pt-3 bg-[#F2F5FB] border-t border-gray-100">
+        <button onClick={onConfirm}
+          className="w-full dt-btn-primary text-white rounded-2xl py-4 text-[15px] uppercase font-bold">
+          Confirm Payment · <Dh /> {amount.toFixed(2)}
         </button>
       </div>
     </div>
@@ -2310,109 +4256,237 @@ function GatePassDetails({ vehicles, onBack, onAddVehicle, onViewDetails, onRemo
 }
 
 /* ---------- ADD VEHICLE ---------- */
-function AddVehicle({ index, onCancel, onSave }: { index: number; onCancel: () => void; onSave: () => void }) {
+function AddVehicle({ index, onCancel, onSave }: any) {
+  const [city, setCity] = useState('');
+  const [plate, setPlate] = useState('');
+  const [vehicleNum, setVehicleNum] = useState('');
   const [selectAll, setSelectAll] = useState(true);
+  const [qty1, setQty1] = useState('200');
+  const [qty2, setQty2] = useState('200');
+
   return (
-    <div className="bg-[#F8FAFF] min-h-full">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onCancel} className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onCancel} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
           <ChevronLeft size={20} />
         </button>
-        <div className="text-white font-medium">Add Vehicle</div>
+        <div className="text-white font-bold text-xl">Add Vehicle</div>
       </div>
-      <div className="p-4 space-y-4">
-        <div className="font-bold text-[#0E1B3D]">Vehicle 0{index}</div>
-        <div>
-          <label className="block text-sm font-bold text-[#0E1B3D] mb-2">Choose Vehicle City</label>
-          <input placeholder="Enter city name"
-            className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm outline-none" />
-        </div>
-        <div>
-          <label className="block text-sm font-bold text-[#0E1B3D] mb-2">Enter Vehicle Plate Number</label>
-          <input placeholder="Enter number"
-            className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm outline-none" />
-        </div>
-        <div>
-          <label className="block text-sm font-bold text-[#0E1B3D] mb-2">Enter Vehicle Number</label>
-          <input placeholder="Enter number"
-            className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm outline-none" />
-        </div>
-        <div>
-          <div className="font-bold text-[#0E1B3D] mb-2">Product Description</div>
-          <label className="inline-flex items-center gap-2 mb-3">
-            <input type="checkbox" checked={selectAll} onChange={e => setSelectAll(e.target.checked)}
-              className="w-5 h-5 rounded accent-[#1360D2]" />
-            <span className="font-medium text-[#0E1B3D]">Select All Products</span>
-          </label>
-          {[
-            { name: 'Flat Rolled Sheets - Boats', code: '54200' },
-            { name: 'Spiral Rolled Sheets - Boats', code: '54200' },
-          ].map(p => (
-            <div key={p.name} className="mb-3">
-              <div className="font-medium text-sm text-[#0E1B3D]">{p.name}</div>
-              <div className="flex items-center gap-3 mt-1">
-                <div className="text-[#0E1B3D] font-bold">{p.code}</div>
-                <input placeholder="200" defaultValue="200"
-                  className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm outline-none" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 pb-6">
+          <div className="font-bold text-[17px] text-[#1E2939]">Vehicle {String(index).padStart(2, '0')}</div>
+
+          {/* City */}
+          <div>
+            <label className="block text-xs font-bold text-[#364153] uppercase tracking-wide mb-2">Choose Vehicle City</label>
+            <div className="relative">
+              <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6A7282]" />
+              <input value={city} onChange={e => setCity(e.target.value)} placeholder="Enter city name"
+                className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 outline-none focus:border-[#1360D2] text-[#1E2939] shadow-sm" />
+            </div>
+          </div>
+
+          {/* Plate */}
+          <div>
+            <label className="block text-xs font-bold text-[#364153] uppercase tracking-wide mb-2">Enter Vehicle Plate Number</label>
+            <div className="relative">
+              <Truck size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6A7282]" />
+              <input value={plate} onChange={e => setPlate(e.target.value)} placeholder="Enter number"
+                className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 outline-none focus:border-[#1360D2] text-[#1E2939] shadow-sm" />
+            </div>
+          </div>
+
+          {/* Vehicle Number */}
+          <div>
+            <label className="block text-xs font-bold text-[#364153] uppercase tracking-wide mb-2">Enter Vehicle Number</label>
+            <div className="relative">
+              <Key size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6A7282]" />
+              <input value={vehicleNum} onChange={e => setVehicleNum(e.target.value)} placeholder="Enter number"
+                className="w-full bg-white border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 outline-none focus:border-[#1360D2] text-[#1E2939] shadow-sm" />
+            </div>
+          </div>
+
+          {/* Product Description */}
+          <div>
+            <div className="font-bold text-[17px] text-[#1E2939] mb-3">Product Description</div>
+            <div className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
+              {/* Select all */}
+              <button onClick={() => setSelectAll(s => !s)} className="flex items-center gap-3">
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${selectAll ? 'bg-[#1360D2] border-[#1360D2]' : 'border-gray-300'}`}>
+                  {selectAll && <Check size={12} className="text-white" strokeWidth={3} />}
+                </div>
+                <span className="font-medium text-[#1E2939] text-[14px]">Select All Products</span>
+              </button>
+
+              {/* Product 1 */}
+              <div>
+                <div className="text-[#4A5565] text-[13px] font-medium mb-2">Flat Rolled Sheets - Boats</div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-[#1E2939] text-[16px] w-14">54200</span>
+                  <input value={qty1} onChange={e => setQty1(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 outline-none focus:border-[#1360D2] text-[#1E2939] text-[14px]"
+                    placeholder="200" />
+                </div>
+              </div>
+
+              {/* Product 2 */}
+              <div>
+                <div className="text-[#4A5565] text-[13px] font-medium mb-2">Spiral Rolled Sheets - Boats</div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-[#1E2939] text-[16px] w-14">54200</span>
+                  <input value={qty2} onChange={e => setQty2(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 outline-none focus:border-[#1360D2] text-[#1E2939] text-[14px]"
+                    placeholder="200" />
+                </div>
               </div>
             </div>
-          ))}
+          </div>
         </div>
-        <div className="pt-2 space-y-3">
-          <button onClick={onSave}
-            className="w-full dt-btn-primary text-white py-3.5 rounded-2xl font-bold shadow">Save Data & Add Vehicle</button>
-          <button onClick={onCancel}
-            className="w-full bg-white border border-[#1360D2] text-[#1360D2] py-3.5 rounded-2xl font-bold">Cancel</button>
-        </div>
+      </div>
+      <div className="shrink-0 px-4 pb-6 pt-3 bg-[#F2F5FB] border-t border-gray-100 space-y-3">
+        <button onClick={onSave} className="w-full dt-btn-primary text-white rounded-2xl py-4 font-bold text-[15px] uppercase">
+          Save Data &amp; Add Vehicle
+        </button>
+        <button onClick={onCancel} className="w-full dt-btn-secondary rounded-2xl py-3.5 font-bold uppercase">
+          Cancel
+        </button>
       </div>
     </div>
   );
 }
 
 /* ---------- BOE DETAILS ---------- */
+const BOE_ROWS = [
+  { label: 'BOE Type',             value: 'Goods' },
+  { label: 'BOE No.',              value: 'LGP - 10002014 - 23' },
+  { label: 'BOE Date',             value: '20-11-23' },
+  { label: 'Exit Port',            value: 'AED01' },
+  { label: 'Rotation',             value: '-' },
+  { label: 'Discharge Port',       value: 'SONY GULF FZE' },
+  { label: 'Vessel',               value: 'F7100' },
+  { label: 'Arrival Date',         value: '-' },
+  { label: 'Customer Code',        value: 'NO' },
+  { label: 'Customer Name',        value: '150' },
+  { label: 'Container BOE',        value: '-' },
+  { label: 'Total Quantity',       value: '2' },
+  { label: 'Cancel Flag',          value: 'NO' },
+  { label: 'Clearance No.',        value: '-' },
+  { label: 'Shipment Description', value: 'Recorder TV, Cameras' },
+];
+
 function BOEDetails({ onBack }: { onBack: () => void }) {
-  const rows = [
-    ['BOE Type', 'Goods'],
-    ['BOE No.', 'LGP - 10002014 - 23'],
-    ['BOE Date', '20-11-23'],
-    ['Exit Port', 'AED01'],
-    ['Rotation', '-'],
-    ['Discharge Port', 'SONY GULF FZE'],
-    ['Vessel', 'F7100'],
-    ['Arrival Date', '-'],
-    ['Customer Code', 'NO'],
-    ['Customer Name', '150'],
-    ['Container BOE', '-'],
-    ['Total Quantity', '2'],
-    ['Cancel Flag', 'NO'],
-    ['Clearance No.', '-'],
-    ['Shipment Description', 'Recorder TV, Cameras'],
-  ];
   return (
-    <div className="bg-[#F8FAFF] min-h-full pb-6">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
           <ChevronLeft size={20} />
         </button>
-        <div className="text-white font-medium">BOE Details</div>
+        <div className="text-white font-bold text-xl">BOE Details</div>
       </div>
-      <div className="p-4 space-y-4">
-        <div className="flex items-center gap-3 py-2">
-          <div className="w-12 h-12 rounded-xl bg-[#1360D2] flex items-center justify-center text-white"><ClipboardList size={22} /></div>
-          <div>
-            <div className="font-bold text-[#0E1B3D]">BOL <span className="font-bold">101-805852323-10</span></div>
-            <div className="flex items-center gap-3 text-xs text-[#696F83] mt-1">
-              <span>Gate Pass Type</span>
-              <span className="flex items-center gap-1"><CheckCircle2 size={14} className="text-[#14C9A9]" /> IN</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full border-2 border-gray-300 inline-block" /> Out</span>
+      <div className="flex-1 overflow-y-auto">
+        {/* BOL card */}
+        <div className="mx-4 mt-4 bg-white rounded-2xl p-4 shadow-sm border border-[#f3f4f6] mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-[#1360D2] flex items-center justify-center shrink-0">
+              <FileCheck size={20} className="text-white" />
+            </div>
+            <div>
+              <div className="font-bold text-[#1E2939] text-[15px]">BOL 101-805852323-10</div>
+              <div className="flex items-center gap-3 mt-1">
+                <span className="text-[#6A7282] text-[12px]">Gate Pass Type</span>
+                <span className="flex items-center gap-1 text-[12px] font-bold text-[#5cb78f]">
+                  <div className="w-4 h-4 rounded-full bg-[#5cb78f] flex items-center justify-center"><Check size={10} className="text-white" strokeWidth={3}/></div>
+                  IN
+                </span>
+                <span className="flex items-center gap-1 text-[12px] font-medium text-[#6A7282]">
+                  <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                  Out
+                </span>
+              </div>
             </div>
           </div>
         </div>
-        <div className="divide-y divide-gray-200">
-          {rows.map(([k, v]) => (
-            <div key={k} className="py-3 flex items-start justify-between gap-4">
-              <span className="font-bold text-[#0E1B3D] text-sm">{k}</span>
-              <span className="text-sm text-[#696F83] text-right">{v}</span>
+        <div className="bg-white shadow-sm mx-4 rounded-2xl overflow-hidden">
+          {BOE_ROWS.map((row, i) => (
+            <div key={row.label} className={`flex items-start justify-between px-5 py-3.5 ${i % 2 === 0 ? 'bg-[#F8FAFF]' : 'bg-white'}`}>
+              <span className="text-[#4A5565] font-medium text-[14px]">{row.label}</span>
+              <span className="text-[#1E2939] text-[14px] text-right max-w-[55%]">{row.value}</span>
+            </div>
+          ))}
+        </div>
+        <div className="h-6" />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- PRODUCT DETAILS SCREEN ---------- */
+const PRODUCT_LIST = [
+  { name: 'Flat-Rolled-Sheets',   packageType: 'Boats', marksNo: '-', balance: 100, totalQty: 5420 },
+  { name: 'Spiral-Rolled-Sheets', packageType: 'Boats', marksNo: '-', balance: 100, totalQty: 5420 },
+];
+
+function ProductDetailsScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <div className="text-white font-bold text-xl">Gate Pass Details</div>
+          <div className="text-white/60 text-xs">Product Description</div>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 pb-6">
+          {/* BOL card */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-[#f3f4f6]">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-11 h-11 rounded-xl bg-[#1360D2] flex items-center justify-center shrink-0">
+                <FileCheck size={20} className="text-white" />
+              </div>
+              <div>
+                <div className="font-bold text-[#1E2939] text-[15px]">BOL 101-805852323-10</div>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[#6A7282] text-[12px]">Gate Pass Type</span>
+                  <span className="flex items-center gap-1 text-[12px] font-bold text-[#5cb78f]">
+                    <div className="w-4 h-4 rounded-full bg-[#5cb78f] flex items-center justify-center"><Check size={10} className="text-white" strokeWidth={3}/></div>
+                    IN
+                  </span>
+                  <span className="flex items-center gap-1 text-[12px] font-medium text-[#6A7282]">
+                    <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                    Out
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button onClick={onBack} className="border border-[#1360D2] text-[#1360D2] rounded-xl px-4 py-2 text-[13px] font-bold">
+              BOE Details
+            </button>
+          </div>
+
+          <div className="font-bold text-[17px] text-[#1E2939]">Product Description</div>
+
+          {PRODUCT_LIST.map((p, i) => (
+            <div key={i} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-[#f3f4f6]">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#f3f4f6]">
+                <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+                  <Package size={18} className="text-[#6A7282]" />
+                </div>
+                <div className="font-bold text-[#1E2939] text-[15px]">{p.name}</div>
+              </div>
+              {[
+                ['Package Type', p.packageType],
+                ['Marks & No.', p.marksNo],
+                ['Balance', String(p.balance)],
+                ['Total Quantity', String(p.totalQty)],
+              ].map(([label, value], ri) => (
+                <div key={label} className={`flex items-center justify-between px-5 py-3.5 ${ri % 2 === 0 ? 'bg-[#F8FAFF]' : 'bg-white'}`}>
+                  <span className="text-[#6A7282] text-[14px]">{label}</span>
+                  <span className="font-bold text-[#1E2939] text-[14px]">{value}</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -2461,7 +4535,7 @@ function GatePassCreatedModal({ onClose }: { onClose: () => void }) {
               <span className="text-[#696F83] text-sm">Gate Pass Vehicle {i + 1}</span>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-[#0E1B3D]">{id}</span>
-                <button className="text-gray-400"><Copy size={16} /></button>
+                <button className="text-gray-500"><Copy size={16} /></button>
               </div>
             </div>
           ))}
@@ -2480,51 +4554,220 @@ function GatePassCreatedModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ---------- CONTAINERS ---------- */
+const CONTAINER_MOCK = [
+  { id: 'CUST150564', seq: 0, size: '40 ft', status: 'MT FROM TOWN', statusColor: '#e07d30', steps: ['Landed','From Town','To Town'], subLabels: ['Import Full','Storage Empty','Import Full'], stepDone: [true, true, false], dates: ['21-OCT-23 00:30','23-OCT-23 00:30',''], tracked: true },
+  { id: 'CUST150565', seq: 1, size: '20 ft', status: 'IN STORAGE', statusColor: '#1360D2', steps: ['Landed','From Town','To Town'], subLabels: ['Import Full','Storage Empty','Import Full'], stepDone: [true, false, false], dates: ['20-OCT-23 12:00','',''], tracked: true },
+  { id: 'CUST150566', seq: 2, size: '40 ft', status: 'DELIVERED', statusColor: '#5cb78f', steps: ['Landed','From Town','To Town'], subLabels: ['Import Full','Storage Empty','Import Full'], stepDone: [true, true, true], dates: ['19-OCT-23 08:00','20-OCT-23 14:30','21-OCT-23 16:00'], tracked: false },
+];
+
 function Containers({ onBack }: { onBack: () => void }) {
-  const containers = [
-    {
-      id: 'CUST150564', i: 0, size: '40 ft', status: 'MT FROM TOWN', statusColor: 'text-[#F9A83D]',
-      steps: 2, dates: ['21-OCT-23 00:30', '23-OCT-23 00:30', ''],
-      cta: 'ADD TO HOME', filled: true,
-    },
-    {
-      id: 'CUST150565', i: 1, size: '20 ft', status: 'IN STORAGE', statusColor: 'text-[#1360D2]',
-      steps: 1, dates: ['20-OCT-23 12:00', '', ''],
-      cta: 'ADDED TO HOME', filled: false,
-    },
-    {
-      id: 'CUST150566', i: 2, size: '40 ft', status: 'DELIVERED', statusColor: 'text-emerald-500',
-      steps: 3, dates: ['19-OCT-23 08:00', '20-OCT-23 14:30', '21-OCT-23 16:00'],
-      cta: 'ADD TO HOME', filled: true,
-    },
-  ];
+  const [search, setSearch] = useState('');
+  const [containers, setContainers] = useState(CONTAINER_MOCK);
+  const [pinFilter, setPinFilter] = useState<'all'|'pinned'>('pinned');
+
+  const ranges = [
+    { k: '7d',     label: 'Last 7 days' },
+    { k: '30d',    label: 'Last 30 days' },
+    { k: '90d',    label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+
+  const fmtD = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+
+  const filtered = containers.filter(c =>
+    c.id.toLowerCase().includes(search.toLowerCase()) &&
+    (pinFilter === 'all' || c.tracked)
+  );
+
   return (
-    <div className="bg-[#F8FAFF] min-h-full pb-6">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
-          <ChevronLeft size={20} />
-        </button>
-        <div className="text-white font-bold">Container</div>
-      </div>
-      <div className="p-4 space-y-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2">
-          <Search size={18} className="text-gray-400" />
-          <input placeholder="Enter Container Number"
-            className="flex-1 text-sm text-[#696F83] outline-none bg-transparent" />
+    <div className="min-h-full flex flex-col" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%), radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%), linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)' }}>
+      {/* Dark blue header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Tracking</div>
+            <div className="text-[18px] font-bold leading-tight">Containers</div>
+          </div>
         </div>
-        {containers.map(c => (
-          <div key={c.id} className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="font-bold text-[#0E1B3D]">{c.id} ({c.i}) - {c.size}</div>
-            <div className={`text-xs font-bold ${c.statusColor} mt-1`}>{c.status}</div>
-            <ContainerStepper steps={c.steps} dates={c.dates} />
-            {c.filled ? (
-              <button className="mt-3 w-full dt-btn-primary text-white py-3 rounded-2xl font-bold">{c.cta}</button>
+        <div className="relative mt-5 flex items-center gap-2">
+          <button onClick={() => setPinFilter('pinned')}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${pinFilter === 'pinned' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            Pinned
+          </button>
+          <button onClick={() => setPinFilter('all')}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${pinFilter === 'all' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            All
+          </button>
+          <div className="flex-1 relative flex justify-end">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Floating search bar */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search container number"
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="w-7 h-7 rounded-full bg-[#F4F7FE] flex items-center justify-center text-[#6B7280] mr-1">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-5 pt-5 pb-10 flex-1 space-y-3">
+        {filtered.map((c, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-sm p-4 border border-[#f3f4f6] space-y-3">
+            <div>
+              <div className="font-bold text-[#1E2939] text-[15px]">{c.id} ({c.seq}) - {c.size}</div>
+              <div className="font-bold text-[12px] mt-0.5" style={{ color: c.statusColor }}>{c.status}</div>
+            </div>
+
+            {/* Step tracker */}
+            <div className="relative">
+              <div className="grid grid-cols-3 gap-1 mb-2">
+                {c.steps.map((step, si) => (
+                  <div key={si} className="text-center">
+                    <div className="font-bold text-[#1E2939] text-[11px]">{step}</div>
+                    <div className="text-[#6A7282] text-[10px]">{c.subLabels[si]}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center">
+                {c.steps.map((_, si) => (
+                  <React.Fragment key={si}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 ${c.stepDone[si] ? 'bg-[#5cb78f] border-[#5cb78f]' : 'border-gray-300 bg-white'}`}>
+                      {c.stepDone[si] && <Check size={14} className="text-white" strokeWidth={3} />}
+                    </div>
+                    {si < c.steps.length - 1 && (
+                      <div className={`flex-1 h-0.5 ${c.stepDone[si] && c.stepDone[si + 1] ? 'bg-[#5cb78f]' : c.stepDone[si] ? 'bg-[#DBEAFE]' : 'border-t-2 border-dashed border-gray-200'}`} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-1 mt-1">
+                {c.dates.map((d, di) => (
+                  <div key={di} className="text-[#6A7282] text-[10px] text-center">{d}</div>
+                ))}
+              </div>
+            </div>
+
+            {c.tracked ? (
+              <div className="flex gap-2">
+                <div className="flex-1 border-2 border-[#1360D2] text-[#1360D2] rounded-2xl py-3 font-bold text-[13px] flex items-center justify-center gap-2">
+                  <Pin size={14} className="fill-[#1360D2]" /> Pinned
+                </div>
+                <button onClick={() => setContainers(cs => cs.map((x, j) => j === i ? { ...x, tracked: false } : x))}
+                  className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-400 shrink-0">
+                  <Trash2 size={16} />
+                </button>
+              </div>
             ) : (
-              <button className="mt-3 w-full border border-[#1360D2] text-[#1360D2] py-3 rounded-2xl font-bold">{c.cta}</button>
+              <button onClick={() => setContainers(cs => cs.map((x, j) => j === i ? { ...x, tracked: true } : x))}
+                className="w-full dt-btn-primary text-white rounded-2xl py-3 font-bold text-[13px] flex items-center justify-center gap-2">
+                <Pin size={14} /> Pin to Track
+              </button>
             )}
           </div>
         ))}
       </div>
+
+      {/* Custom date sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                    max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                    min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+            </div>
+            <button
+              disabled={!customFrom || !customTo}
+              onClick={() => {
+                setRange('custom');
+                setCustomLabel(`${fmtD(customFrom)} – ${fmtD(customTo)}`);
+                setShowCustomSheet(false);
+              }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}
+            >
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2567,63 +4810,206 @@ function ContainerStepper({ steps, dates }: { steps: number; dates: string[] }) 
 }
 
 /* ---------- VESSELS ---------- */
+const VESSEL_MOCK = [
+  { rotation: '908471', terminal: 'Jebel Ali -T1', agent: 'ALLIANCE FAIRFAX', eta: '21-OCT-23 00:30', etd: '21-OCT-23 00:30', cutoff: '21-OCT-23 00:30', tracked: true },
+  { rotation: '908471', terminal: 'Jebel Ali - T2', agent: 'ALLIANCE FAIRFAX', eta: '21-OCT-23 00:30', etd: '21-OCT-23 00:30', cutoff: '21-OCT-23 00:30', tracked: false },
+  { rotation: '908472', terminal: 'Jebel Ali - T3', agent: 'ALLIANCE FAIRFAX', eta: '22-OCT-23 01:30', etd: '22-OCT-23 01:30', cutoff: '22-OCT-23 01:30', tracked: false },
+];
+
 function Vessels({ onBack }: { onBack: () => void }) {
-  const vessels = [
-    { code: '908471', name: 'Jebel Ali -T1', line: 'ALLIANCE FAIRFAX', added: true, eta: '21-OCT-23 00:30', etd: '21-OCT-23 00:30', cutoff: '21-OCT-23 00:30' },
-    { code: '908471', name: 'Jebel Ali -T2', line: 'ALLIANCE FAIRFAX', added: false, eta: '21-OCT-23 00:30', etd: '21-OCT-23 00:30', cutoff: '21-OCT-23 00:30' },
-    { code: '908472', name: 'Jebel Ali -T3', line: 'ALLIANCE FAIRFAX', added: false, eta: '22-OCT-23 01:30', etd: '22-OCT-23 01:30', cutoff: '22-OCT-23 01:30' },
-  ];
+  const [search, setSearch] = useState('');
+  const [vessels, setVessels] = useState(VESSEL_MOCK);
+  const [pinFilter, setPinFilter] = useState<'all'|'pinned'>('pinned');
+
+  const ranges = [
+    { k: '7d',     label: 'Last 7 days' },
+    { k: '30d',    label: 'Last 30 days' },
+    { k: '90d',    label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+
+  const fmtD = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+
+  const filtered = vessels.filter(v =>
+    (!search || v.rotation.includes(search)) &&
+    (pinFilter === 'all' || v.tracked)
+  );
+
   return (
-    <div className="bg-[#F8FAFF] min-h-full pb-6">
-      <div className="bg-[#0E1B3D] dt-safe-top flex items-center gap-3 px-6 py-5 shadow">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0E1B3D]">
-          <ChevronLeft size={20} />
-        </button>
-        <div className="text-white font-bold">Vessel</div>
-      </div>
-      <div className="p-4 space-y-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2">
-          <Search size={18} className="text-gray-400" />
-          <input placeholder="Enter a Rotation Number"
-            className="flex-1 text-sm text-[#696F83] outline-none bg-transparent" />
+    <div className="min-h-full flex flex-col" style={{ background: 'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%), radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%), linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)' }}>
+      {/* Dark blue header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Tracking</div>
+            <div className="text-[18px] font-bold leading-tight">Vessels</div>
+          </div>
         </div>
-        {vessels.map((v, i) => (
-          <div key={i} className="bg-white rounded-2xl p-4 shadow-sm relative">
-            {v.added && (
-              <button className="absolute right-3 top-3 w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-red-500"><Trash2 size={18} /></button>
+        <div className="relative mt-5 flex items-center gap-2">
+          <button onClick={() => setPinFilter('pinned')}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${pinFilter === 'pinned' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            Pinned
+          </button>
+          <button onClick={() => setPinFilter('all')}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${pinFilter === 'all' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            All
+          </button>
+          <div className="flex-1 relative flex justify-end">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Floating search bar */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search by rotation or terminal"
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="w-7 h-7 rounded-full bg-[#F4F7FE] flex items-center justify-center text-[#6B7280] mr-1">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-5 pt-5 pb-10 flex-1 space-y-3">
+        {filtered.map((v, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-sm p-4 border border-[#f3f4f6] space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-[#1360D2]"><Ship size={20} /></div>
-              <div>
-                <div className="font-bold text-[#0E1B3D]">{v.code} - {v.name}</div>
-                <div className="text-xs font-bold text-[#696F83]">{v.line}</div>
+              <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <Ship size={20} className="text-[#1360D2]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-[#1E2939] text-[15px]">{v.rotation} - {v.terminal}</div>
+                <div className="text-[#6A7282] text-[12px] uppercase tracking-wide">{v.agent}</div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
-              <div>
-                <div className="flex items-center gap-1 text-[#696F83]"><Calendar size={12} className="text-[#1360D2]" /> ETA</div>
-                <div className="font-bold text-[#0E1B3D] mt-1">{v.eta.split(' ')[0]}</div>
-                <div className="text-[10px] text-[#696F83]">{v.eta.split(' ')[1]}</div>
-              </div>
-              <div>
-                <div className="flex items-center gap-1 text-[#696F83]"><Calendar size={12} className="text-emerald-500" /> ETD</div>
-                <div className="font-bold text-[#0E1B3D] mt-1">{v.etd.split(' ')[0]}</div>
-                <div className="text-[10px] text-[#696F83]">{v.etd.split(' ')[1]}</div>
-              </div>
-              <div>
-                <div className="flex items-center gap-1 text-[#696F83]"><Clock size={12} className="text-orange-500" /> Cut Off</div>
-                <div className="font-bold text-[#0E1B3D] mt-1">{v.cutoff.split(' ')[0]}</div>
-                <div className="text-[10px] text-[#696F83]">{v.cutoff.split(' ')[1]}</div>
-              </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {[['ETA', v.eta], ['ETD', v.etd], ['Cut Off', v.cutoff]].map(([label, val]) => (
+                <div key={label} className="bg-[#F8FAFF] rounded-xl p-2.5">
+                  <div className="text-[#6A7282] text-[10px] font-bold uppercase tracking-wide mb-1">{label}</div>
+                  <div className="text-[#1E2939] font-bold text-[11px] leading-tight">{(val as string).split(' ')[0]}</div>
+                  <div className="text-[#6A7282] text-[10px]">{(val as string).split(' ')[1]}</div>
+                </div>
+              ))}
             </div>
-            {v.added ? (
-              <button className="mt-3 w-full border border-[#1360D2] text-[#1360D2] py-3 rounded-2xl font-bold">ADDED TO HOME</button>
+
+            {v.tracked ? (
+              <div className="flex gap-2">
+                <div className="flex-1 border-2 border-[#1360D2] text-[#1360D2] rounded-2xl py-3 font-bold text-[13px] flex items-center justify-center gap-2">
+                  <Pin size={14} className="fill-[#1360D2]" /> Pinned
+                </div>
+                <button onClick={() => setVessels(vs => vs.map((x, j) => j === i ? { ...x, tracked: false } : x))}
+                  className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-400 shrink-0">
+                  <Trash2 size={16} />
+                </button>
+              </div>
             ) : (
-              <button className="mt-3 w-full dt-btn-primary text-white py-3 rounded-2xl font-bold">ADD TO HOME</button>
+              <button onClick={() => setVessels(vs => vs.map((x, j) => j === i ? { ...x, tracked: true } : x))}
+                className="w-full dt-btn-primary text-white rounded-2xl py-3 font-bold text-[13px] flex items-center justify-center gap-2">
+                <Pin size={14} /> Pin to Track
+              </button>
             )}
           </div>
         ))}
       </div>
+
+      {/* Custom date sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                    max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                    min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+            </div>
+            <button
+              disabled={!customFrom || !customTo}
+              onClick={() => {
+                setRange('custom');
+                setCustomLabel(`${fmtD(customFrom)} – ${fmtD(customTo)}`);
+                setShowCustomSheet(false);
+              }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}
+            >
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2870,7 +5256,7 @@ function ResetPassword({ onBack, onReset }: { onBack: () => void; onReset: () =>
           <input value={pw1} onChange={e => setPw1(e.target.value)}
             type={show1 ? 'text' : 'password'} placeholder="New password"
             className="w-full bg-white border-[1.5px] border-[#E7EBF2] hover:border-[#1360D2]/50 focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/15 rounded-2xl pl-12 pr-12 py-4 text-[15px] text-[#0E1B3D] placeholder:text-[#6B7280] outline-none transition-all" />
-          <button onClick={() => setShow1(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1360D2]">
+          <button onClick={() => setShow1(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#1360D2]">
             {show1 ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
@@ -2879,7 +5265,7 @@ function ResetPassword({ onBack, onReset }: { onBack: () => void; onReset: () =>
           <input value={pw2} onChange={e => setPw2(e.target.value)}
             type={show2 ? 'text' : 'password'} placeholder="Confirm new password"
             className="w-full bg-white border-[1.5px] border-[#E7EBF2] hover:border-[#1360D2]/50 focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/15 rounded-2xl pl-12 pr-12 py-4 text-[15px] text-[#0E1B3D] placeholder:text-[#6B7280] outline-none transition-all" />
-          <button onClick={() => setShow2(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1360D2]">
+          <button onClick={() => setShow2(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#1360D2]">
             {show2 ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
@@ -2898,7 +5284,7 @@ function PasswordResetSuccess({ onBack }: { onBack: () => void }) {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center px-5"
       style={{ background: 'rgba(7, 16, 38, 0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
-      <div className="dt-screen relative w-full max-w-sm bg-white rounded-[28px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(7,16,38,0.55)]">
+      <div className="dt-pop relative w-full max-w-sm bg-white rounded-[28px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(7,16,38,0.55)]">
         {/* Blue-wash hero with success illustration */}
         <div className="relative overflow-hidden px-6 pt-7 pb-4"
           style={{ background: 'linear-gradient(180deg, #DBEAFE 0%, #FFFFFF 100%)' }}>
@@ -2997,7 +5383,7 @@ function Notifications({ onBack }: { onBack: () => void }) {
       </div>
       <div className="p-4 space-y-5">
         <div>
-          <div className="text-xs font-bold text-gray-400 mb-2">TODAY</div>
+          <div className="text-xs font-bold text-gray-500 mb-2">TODAY</div>
           <div className="space-y-3">
             <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4">
               <div className="flex gap-3">
@@ -3010,7 +5396,7 @@ function Notifications({ onBack }: { onBack: () => void }) {
                 <span className="w-2 h-2 rounded-full bg-blue-500 mt-2" />
               </div>
               <div className="flex items-center justify-between mt-3">
-                <span className="text-xs text-gray-400">4h ago</span>
+                <span className="text-xs text-gray-500">4h ago</span>
                 <button className="dt-btn-primary text-white px-4 py-2 rounded-2xl text-sm font-bold">Top Up Now</button>
               </div>
             </div>
@@ -3027,12 +5413,12 @@ function Notifications({ onBack }: { onBack: () => void }) {
                 </div>
                 <span className="w-2 h-2 rounded-full bg-blue-500 mt-2" />
               </div>
-              <div className="text-xs text-gray-400 mt-2">5h ago</div>
+              <div className="text-xs text-gray-500 mt-2">5h ago</div>
             </div>
           </div>
         </div>
         <div>
-          <div className="text-xs font-bold text-gray-400 mb-2">YESTERDAY</div>
+          <div className="text-xs font-bold text-gray-500 mb-2">YESTERDAY</div>
           <div className="space-y-3">
             <div className="bg-[#EFF6FF] border border-blue-100 rounded-2xl p-4">
               <div className="flex gap-3">
@@ -3044,7 +5430,7 @@ function Notifications({ onBack }: { onBack: () => void }) {
                     <span className="inline-flex items-center border border-blue-200 bg-white rounded-md px-2 py-0.5 text-xs font-bold text-[#1360D2]">Storage</span>
                     <span className="inline-flex items-center gap-1 border border-blue-200 bg-white rounded-md px-2 py-0.5 text-xs font-bold text-[#1360D2]"><Clock size={11} /> 14 days left</span>
                   </div>
-                  <div className="text-xs text-gray-400 mt-2">Yesterday</div>
+                  <div className="text-xs text-gray-500 mt-2">Yesterday</div>
                 </div>
               </div>
             </div>
@@ -3112,7 +5498,7 @@ function NotificationsSettings({ onBack }: { onBack: () => void }) {
                       className="mt-2 text-[#1360D2] font-bold text-sm">View Notification Types</button>
                   )}
                   {'status' in g && (
-                    <div className={`mt-1.5 text-xs flex items-center gap-1.5 ${g.status === 'Active' ? 'text-emerald-500' : 'text-gray-400'}`}>
+                    <div className={`mt-1.5 text-xs flex items-center gap-1.5 ${g.status === 'Active' ? 'text-emerald-500' : 'text-gray-500'}`}>
                       <span className={`w-2 h-2 rounded-full ${g.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                       {g.status}
                     </div>
@@ -3243,9 +5629,10 @@ function RenewSuccessModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ---------- CARGO MANAGEMENT MENU ---------- */
-function CargoManagement({ onBack, onInvoiceDownload }:
-  { onBack: () => void; onInvoiceDownload: () => void }) {
+function CargoManagement({ onBack, onInvoiceDownload, onGatePass }:
+  { onBack: () => void; onInvoiceDownload: () => void; onGatePass: () => void }) {
   const items = [
+    { icon: MapPin, title: 'Gate Pass', desc: 'Manage and track gate passes', onClick: onGatePass },
     { icon: Receipt, title: 'Invoice Download', desc: 'Download and share invoices', onClick: onInvoiceDownload },
     { icon: Ship, title: 'Vessel Schedule', desc: 'View vessel rotation schedule' },
     { icon: Boxes, title: 'Container Tracking', desc: 'Track containers in real-time' },
@@ -3260,7 +5647,7 @@ function CargoManagement({ onBack, onInvoiceDownload }:
           </button>
           <div>
             <div className="text-xl font-bold">Cargo Management</div>
-            <div className="text-sm text-white/70">4 available</div>
+            <div className="text-sm text-white/70">5 available</div>
           </div>
         </div>
       </div>
@@ -3831,5 +6218,1168 @@ function ShippingIllustration({ accent }: { accent: string }) {
         <path d="M184 47 L184 56" stroke={accent} strokeWidth="2" />
       </g>
     </svg>
+  );
+}
+
+/* ---------- TLUC PAYMENTS — list of vessels available to pay ---------- */
+type Stuffing = 'TOWN/FREE ZONE' | 'FREE ZONE' | 'TOWN';
+
+type StuffingAlloc = { stuffing: Stuffing; qty: number };
+
+type TlucContainer = {
+  type: string;
+  totalQty: number;
+  paidQty: number;
+  pending: number;
+  /** Multiple stuffing allocations — sum of qty <= pending */
+  paying: StuffingAlloc[];
+  /** Token Paying For dropdown — number of tokens user pays for */
+  tokenPayingFor: number;
+};
+
+type TlucRecord = {
+  dpwRef: string;
+  agentRef: string;
+  requestType: string;
+  brnDate: string;
+  expiryDate: string;
+  shipper: string;
+  reqQty: number;
+  status: 'Partially Paid' | 'Unpaid';
+  details: {
+    agent: string;
+    line: string;
+    instructionType: string;
+    destinationPort: string;
+    dischargePort: string;
+    rotationVessel: string;
+    loadCutOffDate: string;
+    receiveTerminal: string;
+    stuffingLocation: string;
+    haulier: string;
+  };
+  containers: TlucContainer[];
+};
+
+function TlucPayments({ onBack }: { onBack: () => void }) {
+  const initialRecords: TlucRecord[] = [
+    {
+      dpwRef: '5021359', agentRef: '600089631', requestType: 'EXPORT FULL',
+      brnDate: '20-May-25', expiryDate: '20-May-26 10:30', shipper: 'F7100 SONY GULF FZE',
+      reqQty: 4, status: 'Partially Paid',
+      details: {
+        agent: 'A180 - MAERSK KANOO UAE LLC', line: 'MSK - MAERSK LINE',
+        instructionType: 'EXPORT FULL DEPOSIT - WITH EMPTY DELIVERY',
+        destinationPort: 'AEJED - JEBEL DHANNA', dischargePort: 'KWJBD - JEBEL DHANA',
+        rotationVessel: '825615 - ALBERT MAERSK',
+        loadCutOffDate: '20-May-26 10:30', receiveTerminal: 'T2 - TERMINAL TWO',
+        stuffingLocation: 'FREE ZONE', haulier: 'H00101 - Red Arrow Transportation (LLC)',
+      },
+      containers: [
+        { type: 'AS [AS] - 20', totalQty: 2, paidQty: 0, pending: 2, paying: [{ stuffing: 'TOWN/FREE ZONE', qty: 2 }], tokenPayingFor: 2 },
+        { type: 'GP [GP] - 40', totalQty: 2, paidQty: 0, pending: 2, paying: [{ stuffing: 'FREE ZONE',      qty: 2 }], tokenPayingFor: 2 },
+      ],
+    },
+    {
+      dpwRef: '5019641', agentRef: 'ARPMNONDUBALTOW', requestType: 'Summary',
+      brnDate: '23-Dec-25', expiryDate: '23-Dec-25 11:59', shipper: 'F7100 SONY GULF FZE',
+      reqQty: 6, status: 'Partially Paid',
+      details: {
+        agent: 'A180 - MAERSK KANOO UAE LLC', line: 'MSK - MAERSK LINE', instructionType: 'EXPORT FULL DEPOSIT',
+        destinationPort: 'AEJEA - JEBEL ALI', dischargePort: 'AEDXB - DUBAI',
+        rotationVessel: '825120 - ALBERT MAERSK',
+        loadCutOffDate: '23-Dec-25 11:59', receiveTerminal: 'T1 - TERMINAL ONE',
+        stuffingLocation: 'TOWN', haulier: 'H00101 - Red Arrow Transportation (LLC)',
+      },
+      containers: [
+        { type: 'GP [GP] - 20', totalQty: 4, paidQty: 1, pending: 3, paying: [{ stuffing: 'TOWN', qty: 3 }],            tokenPayingFor: 3 },
+        { type: 'HC [HC] - 40', totalQty: 2, paidQty: 0, pending: 2, paying: [{ stuffing: 'TOWN/FREE ZONE', qty: 1 }], tokenPayingFor: 1 },
+      ],
+    },
+    {
+      dpwRef: '5019643', agentRef: 'ARPMNONDUBALTOW', requestType: 'Summary',
+      brnDate: '24-Dec-25', expiryDate: '24-Dec-25 11:59', shipper: 'F7100 SONY GULF FZE',
+      reqQty: 3, status: 'Unpaid',
+      details: {
+        agent: 'A180 - MAERSK KANOO UAE LLC', line: 'MSK - MAERSK LINE', instructionType: 'EXPORT FULL DEPOSIT',
+        destinationPort: 'AEJEA - JEBEL ALI', dischargePort: 'AEDXB - DUBAI',
+        rotationVessel: '825120 - ALBERT MAERSK',
+        loadCutOffDate: '24-Dec-25 11:59', receiveTerminal: 'T2 - TERMINAL TWO',
+        stuffingLocation: 'FREE ZONE', haulier: 'H00101 - Red Arrow Transportation (LLC)',
+      },
+      containers: [
+        { type: 'GP [GP] - 20', totalQty: 3, paidQty: 0, pending: 3, paying: [{ stuffing: 'FREE ZONE', qty: 3 }], tokenPayingFor: 3 },
+      ],
+    },
+  ];
+  const [records, setRecords] = useState<TlucRecord[]>(initialRecords);
+  const [query, setQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'dpw'|'container'>('dpw');
+  const [statusFilter, setStatusFilter] = useState<'all'|'Partially Paid'|'Unpaid'>('all');
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showBrnFor, setShowBrnFor] = useState<string | null>(null);
+  const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
+  const [payingRecords, setPayingRecords] = useState<TlucRecord[] | null>(null);
+  const [brnFlyoutFor, setBrnFlyoutFor] = useState<TlucRecord | null>(null);
+  const [billingFlyoutFor, setBillingFlyoutFor] = useState<TlucRecord | null>(null);
+
+  const toggleSelected = (dpwRef: string) => {
+    setSelectedRefs(prev => {
+      const next = new Set(prev);
+      if (next.has(dpwRef)) next.delete(dpwRef); else next.add(dpwRef);
+      return next;
+    });
+  };
+
+  const ranges = [
+    { k: '7d',  label: 'Last 7 days' },
+    { k: '30d', label: 'Last 30 days' },
+    { k: '90d', label: 'Last 90 days' },
+    { k: 'custom', label: 'Custom range' },
+  ] as const;
+  type RangeKey = typeof ranges[number]['k'];
+  const [range, setRange] = useState<RangeKey>('7d');
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+
+  const fmtDateTluc = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]}`;
+  };
+
+  const currentLabel = range === 'custom' && customLabel ? customLabel : (ranges.find(r => r.k === range)?.label ?? '');
+
+  // ---------- Billing model ----------
+  // Each container generates 3 tariff lines per the DP World billing calculation.
+  type BillingLine = {
+    stuffing: string; tariff: string; contrType: string;
+    noOfContrs: number; rate: number; gross: number;
+    net: number; vatPct: number; vatAmt: number; total: number;
+  };
+  const tariffs = [
+    { code: 'TLUC',  desc: 'TLUC - TRUCK LOADING / UNLOADING',     unit: 314 },
+    { code: 'TOKEN', desc: 'TOKEN PROCESSING CHARGE - ONLINE',      unit:  50 },
+    { code: 'WEIGH', desc: 'WEIGHING CONTAINERS ENTERING/LEAVING',  unit:  65 },
+  ];
+  const containerPayingQty = (c: TlucContainer) => c.paying.reduce((s, a) => s + a.qty, 0);
+
+  const computeBillingLines = (r: TlucRecord): BillingLine[] => {
+    const lines: BillingLine[] = [];
+    r.containers.forEach(c => {
+      c.paying.forEach(alloc => {
+        if (alloc.qty <= 0) return;
+        // TLUC + Weighing lines tied to container allocation
+        tariffs.slice(0, 1).concat(tariffs.slice(2)).forEach(t => {
+          const gross = alloc.qty * t.unit;
+          lines.push({
+            stuffing: alloc.stuffing, tariff: t.desc, contrType: c.type,
+            noOfContrs: alloc.qty, rate: t.unit, gross, net: gross,
+            vatPct: 0, vatAmt: 0, total: gross,
+          });
+        });
+      });
+      // Token Processing line (uses tokenPayingFor)
+      if (c.tokenPayingFor > 0) {
+        const t = tariffs[1];
+        const gross = c.tokenPayingFor * t.unit;
+        lines.push({
+          stuffing: c.paying[0]?.stuffing ?? 'FREE ZONE',
+          tariff: t.desc, contrType: c.type,
+          noOfContrs: c.tokenPayingFor, rate: t.unit, gross, net: gross,
+          vatPct: 0, vatAmt: 0, total: gross,
+        });
+      }
+    });
+    return lines;
+  };
+
+  // Live "pending" totals (used inline as a hint; not authoritative until computed)
+  const recordLiveTotal = (r: TlucRecord) => {
+    return r.containers.reduce((acc, c) => {
+      const qty = containerPayingQty(c);
+      if (qty <= 0 && c.tokenPayingFor <= 0) return acc;
+      const containerGross = qty * (tariffs[0].unit + tariffs[2].unit) + c.tokenPayingFor * tariffs[1].unit;
+      return { total: acc.total + containerGross, payingQty: acc.payingQty + qty };
+    }, { total: 0, payingQty: 0 });
+  };
+
+  // ---------- Committed (computed) state ----------
+  type Committed = { lines: BillingLine[]; total: number; payingQty: number };
+  const [committed, setCommitted] = useState<Record<string, Committed>>(() => {
+    // Pre-compute for the initial dataset so cards show stored totals on first load.
+    const seed: Record<string, Committed> = {};
+    initialRecords.forEach(r => {
+      const lines = computeBillingLines(r);
+      seed[r.dpwRef] = {
+        lines,
+        total: lines.reduce((s, l) => s + l.total, 0),
+        payingQty: r.containers.reduce((s, c) => s + c.paying.reduce((q, a) => q + a.qty, 0), 0),
+      };
+    });
+    return seed;
+  });
+  const [dirtyRefs, setDirtyRefs] = useState<Set<string>>(new Set());
+
+  const computeCharges = (dpwRef: string) => {
+    const r = records.find(x => x.dpwRef === dpwRef);
+    if (!r) return;
+    const lines = computeBillingLines(r);
+    const total = lines.reduce((s, l) => s + l.total, 0);
+    const payingQty = r.containers.reduce((s, c) => s + containerPayingQty(c), 0);
+    setCommitted(c => ({ ...c, [dpwRef]: { lines, total, payingQty } }));
+    setDirtyRefs(d => { const n = new Set(d); n.delete(dpwRef); return n; });
+  };
+
+  // Totals as returned to the rest of the UI — uses last committed value when available.
+  const recordTotals = (r: TlucRecord) => {
+    const live = recordLiveTotal(r);
+    const c = committed[r.dpwRef];
+    if (c && !dirtyRefs.has(r.dpwRef)) {
+      return { amount: c.total, vat: 0, total: c.total, payingQty: c.payingQty };
+    }
+    return { amount: live.total, vat: 0, total: live.total, payingQty: live.payingQty };
+  };
+  const containerRowTotals = (c: TlucContainer) => {
+    const qty = containerPayingQty(c);
+    const total = qty * (tariffs[0].unit + tariffs[2].unit) + c.tokenPayingFor * tariffs[1].unit;
+    return { amount: total, vat: 0, total };
+  };
+
+  const updateContainer = (dpwRef: string, idx: number, patch: Partial<TlucContainer>) => {
+    setRecords(rs => rs.map(r => r.dpwRef !== dpwRef ? r : {
+      ...r,
+      containers: r.containers.map((c, i) => i === idx ? { ...c, ...patch } : c),
+    }));
+    setDirtyRefs(d => { const n = new Set(d); n.add(dpwRef); return n; });
+  };
+
+  // Allocation editors
+  const setAllocation = (dpwRef: string, cIdx: number, aIdx: number, patch: Partial<StuffingAlloc>) => {
+    setRecords(rs => rs.map(r => r.dpwRef !== dpwRef ? r : {
+      ...r,
+      containers: r.containers.map((c, i) => i !== cIdx ? c : {
+        ...c,
+        paying: c.paying.map((a, j) => j === aIdx ? { ...a, ...patch } : a),
+      }),
+    }));
+    setDirtyRefs(d => { const n = new Set(d); n.add(dpwRef); return n; });
+  };
+  const addAllocation = (dpwRef: string, cIdx: number) => {
+    setRecords(rs => rs.map(r => r.dpwRef !== dpwRef ? r : {
+      ...r,
+      containers: r.containers.map((c, i) => i !== cIdx ? c : {
+        ...c,
+        paying: [...c.paying, { stuffing: 'FREE ZONE', qty: 0 }],
+      }),
+    }));
+    setDirtyRefs(d => { const n = new Set(d); n.add(dpwRef); return n; });
+  };
+  const removeAllocation = (dpwRef: string, cIdx: number, aIdx: number) => {
+    setRecords(rs => rs.map(r => r.dpwRef !== dpwRef ? r : {
+      ...r,
+      containers: r.containers.map((c, i) => i !== cIdx ? c : {
+        ...c,
+        paying: c.paying.filter((_, j) => j !== aIdx),
+      }),
+    }));
+    setDirtyRefs(d => { const n = new Set(d); n.add(dpwRef); return n; });
+  };
+
+  const isFiltered = !!query || statusFilter !== 'all' || range !== '7d';
+  const filtered = records.filter(r => {
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+    if (!query) return true;
+    const q = query.toLowerCase();
+    if (searchMode === 'dpw') return r.dpwRef.toLowerCase().includes(q) || r.agentRef.toLowerCase().includes(q);
+    return r.containers.some(c => c.type.toLowerCase().includes(q));
+  });
+
+  return (
+    <div className="min-h-full flex flex-col"
+      style={{
+        background:
+          'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%),' +
+          'radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%),' +
+          'linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)',
+      }}>
+      {/* Hero header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onBack}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Payments</div>
+            <div className="text-[18px] font-bold leading-tight">TLUC Payments</div>
+          </div>
+        </div>
+        {/* Search mode tags + range picker row */}
+        <div className="relative mt-5 flex items-center gap-2">
+          <button onClick={() => { setSearchMode('dpw'); setQuery(''); }}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${searchMode === 'dpw' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            DPW Reference
+          </button>
+          <button onClick={() => { setSearchMode('container'); setQuery(''); }}
+            className={`flex-1 h-8 rounded-full text-[12px] font-bold border transition-all ${searchMode === 'container' ? 'bg-white text-[#1360D2] border-white' : 'bg-white/15 text-white/80 border-white/25'}`}>
+            Container No.
+          </button>
+          <div className="flex-1 relative flex justify-end">
+            <button onClick={() => setShowRangePicker(s => !s)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white/15 border border-white/25 text-[11px] font-bold text-white whitespace-nowrap">
+              <Calendar size={11} />
+              {currentLabel}
+              <ChevronRight size={11} className={`transition-transform ${showRangePicker ? '-rotate-90' : 'rotate-90'}`} />
+            </button>
+            {showRangePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[200px] bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_22px_44px_-12px_rgba(14,27,61,0.3)] overflow-hidden">
+                {ranges.map(r => {
+                  const active = r.k === range;
+                  return (
+                    <button key={r.k}
+                      onClick={() => {
+                        if (r.k === 'custom') { setShowRangePicker(false); setShowCustomSheet(true); }
+                        else { setRange(r.k); setShowRangePicker(false); }
+                      }}
+                      className={`w-full text-left px-4 py-3 text-[13px] font-semibold flex items-center justify-between ${active ? 'bg-[#EAF1FE] text-[#1360D2]' : 'text-[#0E1B3D] hover:bg-[#F4F7FE]'}`}>
+                      {r.label}
+                      {active && <Check size={14} strokeWidth={3} className="text-[#1360D2]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Search bar — floating, overlaps header */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#99A1AF]" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder={searchMode === 'dpw' ? 'Search by DPW reference number' : 'Search by container number'}
+              className="w-full bg-transparent pl-9 pr-3 py-2.5 text-[13.5px] text-[#0E1B3D] placeholder:text-[#99A1AF] outline-none" />
+          </div>
+          {query && (
+            <button onClick={() => setQuery('')}
+              className="w-7 h-7 rounded-full bg-[#F4F7FE] flex items-center justify-center text-[#6B7280] mr-1">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Status filter chips */}
+      <div className="px-5 pt-3 flex items-center gap-1.5 flex-wrap">
+        {(['all', 'Partially Paid', 'Unpaid'] as const).map(s => {
+          const active = statusFilter === s;
+          const label = s === 'all' ? 'All' : s;
+          return (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`h-8 px-3.5 rounded-full text-[11.5px] font-bold whitespace-nowrap transition border ${
+                active
+                  ? 'bg-[#1360D2] border-transparent text-white shadow-[0_6px_14px_-8px_rgba(19,96,210,0.6)]'
+                  : 'bg-white border-[#E0EAFB] text-[#0E1B3D]'}`}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="px-5 pt-4 pb-10 flex-1 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] uppercase tracking-wider text-[#0E47A6] font-bold">BRN records</div>
+          <div className="text-[11px] text-[#6B7280]">
+            {isFiltered
+              ? `${filtered.length} match${filtered.length !== 1 ? 'es' : ''}`
+              : `${filtered.length} record${filtered.length !== 1 ? 's' : ''} available`}
+          </div>
+        </div>
+
+        {filtered.map(r => {
+          const isSelected = selectedRefs.has(r.dpwRef);
+          const statusStyle = r.status === 'Partially Paid'
+            ? { bg: '#FFF7ED', border: '#FFD6A8', fg: '#D26A24', dot: '#F59E0B' }
+            : { bg: '#FEECEC', border: '#F5B5AA', fg: '#B42318', dot: '#EF4444' };
+          return (
+            <div key={r.dpwRef}
+              className={`bg-white rounded-2xl border overflow-hidden transition ${isSelected ? 'border-[#1360D2] shadow-[0_10px_24px_-14px_rgba(19,96,210,0.45)] ring-4 ring-[#1360D2]/8' : 'border-[#EAF0FA] shadow-[0_8px_18px_-14px_rgba(14,27,61,0.18)]'}`}>
+              {/* Card header */}
+              <div className="p-4 flex items-center gap-3">
+                <label className="flex items-center cursor-pointer shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={isSelected}
+                    onChange={() => toggleSelected(r.dpwRef)}
+                    className="w-5 h-5 rounded-md border-[#D0D5DD] accent-[#1360D2]" />
+                </label>
+                <button onClick={() => toggleSelected(r.dpwRef)}
+                  className="flex-1 flex items-center gap-3 text-left min-w-0">
+                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 text-[#1360D2]"
+                    style={{ background: 'linear-gradient(135deg, #EAF1FE, #DCE7FB)' }}>
+                    <Ship size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">DPW Ref</span>
+                      <span className="text-[15px] font-bold text-[#0E1B3D]">{r.dpwRef}</span>
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-[#6B7280] truncate">
+                      Agent <span className="text-[#33455F] font-semibold">{r.agentRef}</span> · {r.requestType}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase tracking-wider"
+                      style={{ background: statusStyle.bg, color: statusStyle.fg, border: `1px solid ${statusStyle.border}` }}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusStyle.dot }} />
+                      {r.status}
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Compact summary grid — DPW info only, no payment numbers */}
+              <div className="px-4 pb-3 grid grid-cols-2 gap-2 text-[11px]">
+                <SummaryCell label="BRN Date"    value={r.brnDate} />
+                <SummaryCell label="Expiry Date" value={r.expiryDate} />
+                <SummaryCell label="Shipper"     value={r.shipper} />
+                <SummaryCell label="Request"     value={r.requestType} />
+              </div>
+              <button onClick={() => setBrnFlyoutFor(r)}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 border-t border-[#F3F4F6] text-[12px] font-semibold text-[#1360D2] hover:bg-[#F4F7FE]">
+                <Info size={13} /> View BRN details
+              </button>
+            </div>
+          );
+        })}
+
+        {filtered.length === 0 && (
+          <div className="bg-white rounded-2xl border border-[#EAF0FA] py-10 px-6 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#EAF1FE] mx-auto flex items-center justify-center text-[#1360D2]">
+              <Ship size={20} />
+            </div>
+            <div className="mt-3 text-[13.5px] font-bold text-[#0E1B3D]">No records found</div>
+            <div className="mt-1 text-[12px] text-[#6B7280]">Try a different search term or date range.</div>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky proceed bar */}
+      {selectedRefs.size > 0 && !payingRecords && (() => {
+        const selectedRecords = records.filter(r => selectedRefs.has(r.dpwRef));
+        return (
+          <div className="sticky -bottom-6 left-0 right-0 z-30 mt-auto bg-white border-t border-gray-200 shadow-[0_-6px_18px_-12px_rgba(14,27,61,0.18)] px-5 pt-3 pb-9 flex items-center gap-3">
+            <div className="flex-1 text-[12.5px] font-semibold text-[#0E1B3D]">
+              {selectedRefs.size} record{selectedRefs.size !== 1 ? 's' : ''} selected
+            </div>
+            <button onClick={() => setPayingRecords(selectedRecords)}
+              className="dt-btn-primary text-white px-6 py-3 rounded-2xl font-bold uppercase tracking-wide text-[12.5px] flex items-center gap-1.5">
+              Proceed <ArrowRight size={14} />
+            </button>
+          </div>
+        );
+      })()}
+
+      {payingRecords && (() => {
+        // Resolve up-to-date records by ref from latest state (so edits inside the wizard re-render with fresh totals)
+        const liveRecords = payingRecords.map(p => records.find(r => r.dpwRef === p.dpwRef) ?? p);
+        const liveTotals = liveRecords.reduce((acc, r) => {
+          const t = recordTotals(r);
+          return { amount: acc.amount + t.amount, vat: acc.vat + t.vat, total: acc.total + t.total, payingQty: acc.payingQty + t.payingQty };
+        }, { amount: 0, vat: 0, total: 0, payingQty: 0 });
+        return (
+          <TlucPaymentSheet records={liveRecords}
+            totals={liveTotals}
+            updateContainer={updateContainer}
+            containerRowTotals={containerRowTotals}
+            recordTotals={recordTotals}
+            committed={committed}
+            isDirty={(dpwRef: string) => dirtyRefs.has(dpwRef)}
+            onCompute={computeCharges}
+            setAllocation={setAllocation}
+            addAllocation={addAllocation}
+            removeAllocation={removeAllocation}
+            onShowBrn={(r) => setBrnFlyoutFor(r)}
+            onShowBilling={(r) => setBillingFlyoutFor(r)}
+            onClose={() => setPayingRecords(null)}
+            onPaid={() => {
+              const paidRefs = new Set(liveRecords.map(r => r.dpwRef));
+              setSelectedRefs(prev => { const n = new Set(prev); paidRefs.forEach(ref => n.delete(ref)); return n; });
+              setPayingRecords(null);
+            }} />
+        );
+      })()}
+
+      {/* BRN details flyout — rendered after wizard so it stacks on top */}
+      {brnFlyoutFor && (
+        <div className="absolute inset-0 z-[60]">
+          <BottomSheet title={`BRN details · ${brnFlyoutFor.dpwRef}`} onClose={() => setBrnFlyoutFor(null)}>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+              <BrnField label="Agent"            value={brnFlyoutFor.details.agent} />
+              <BrnField label="Line"             value={brnFlyoutFor.details.line} />
+              <BrnField label="Instruction Type" value={brnFlyoutFor.details.instructionType} full />
+              <BrnField label="Destination Port" value={brnFlyoutFor.details.destinationPort} />
+              <BrnField label="Discharge Port"   value={brnFlyoutFor.details.dischargePort} />
+              <BrnField label="Rotation/Vessel"  value={brnFlyoutFor.details.rotationVessel} />
+              <BrnField label="Expiry Date"      value={brnFlyoutFor.expiryDate} />
+              <BrnField label="Load Cut Off"     value={brnFlyoutFor.details.loadCutOffDate} />
+              <BrnField label="Receive Terminal" value={brnFlyoutFor.details.receiveTerminal} />
+              <BrnField label="Stuffing"         value={brnFlyoutFor.details.stuffingLocation} />
+              <BrnField label="Shipper"          value={brnFlyoutFor.shipper} />
+              <BrnField label="Haulier"          value={brnFlyoutFor.details.haulier} full />
+            </div>
+          </BottomSheet>
+        </div>
+      )}
+
+      {billingFlyoutFor && committed[billingFlyoutFor.dpwRef] && (
+        <div className="absolute inset-0 z-[60]">
+          <BottomSheet title={`Billing calculation · ${billingFlyoutFor.dpwRef}`} onClose={() => setBillingFlyoutFor(null)}>
+            <BillingCalculationTable
+              lines={committed[billingFlyoutFor.dpwRef].lines}
+              total={committed[billingFlyoutFor.dpwRef].total} />
+          </BottomSheet>
+        </div>
+      )}
+
+      {/* Custom date range bottom sheet */}
+      {showCustomSheet && (
+        <div className="absolute inset-0 bg-[#0E1B3D]/55 flex items-end z-50" onClick={() => setShowCustomSheet(false)}>
+          <div className="bg-white w-full rounded-t-3xl shadow-2xl px-5 pt-5 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-[#D1D5DB] mx-auto mb-5" />
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-[17px] font-bold text-[#0E1B3D]">Custom Range</p>
+              <button onClick={() => setShowCustomSheet(false)} className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+                <X size={15} className="text-[#6B7280]" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">From</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                    max={customTo || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#6B7280] mb-1.5 block">To</label>
+                <div className="flex items-center gap-2 border border-[#E0EAFB] rounded-xl px-4 py-3 bg-[#F8FAFF]">
+                  <Calendar size={15} className="text-[#1360D2] shrink-0" />
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                    min={customFrom || undefined}
+                    className="flex-1 bg-transparent text-[14px] text-[#0E1B3D] outline-none" />
+                </div>
+              </div>
+            </div>
+            <button
+              disabled={!customFrom || !customTo}
+              onClick={() => {
+                setRange('custom');
+                setCustomLabel(`${fmtDateTluc(customFrom)} – ${fmtDateTluc(customTo)}`);
+                setShowCustomSheet(false);
+              }}
+              className={`w-full py-3.5 rounded-xl text-[14px] font-bold transition-all ${customFrom && customTo ? 'dt-btn-primary' : 'bg-[#E5E7EB] text-[#99A1AF] cursor-not-allowed'}`}
+            >
+              Apply Range
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryCell({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className={`rounded-xl px-2.5 py-2 ${highlight ? 'bg-[#EAF1FE]' : 'bg-[#F4F7FE]'}`}>
+      <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-bold">{label}</div>
+      <div className={`text-[12px] font-bold mt-0.5 ${highlight ? 'text-[#0E47A6]' : 'text-[#0E1B3D]'}`}>{value}</div>
+    </div>
+  );
+}
+
+function BrnField({ label, value, full }: { label: string; value: string; full?: boolean }) {
+  return (
+    <div className={`min-w-0 ${full ? 'col-span-2' : ''}`}>
+      <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">{label}</div>
+      <div className="text-[12.5px] font-semibold text-[#33455F] mt-0.5 break-words">{value}</div>
+    </div>
+  );
+}
+
+function SummaryLine({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className={`text-[12.5px] ${bold ? 'font-bold text-[#0E1B3D]' : 'text-[#4A5565]'}`}>{label}</span>
+      <span className={`flex items-center gap-0.5 ${bold ? 'text-[15px] font-bold text-[#0E47A6]' : 'text-[13px] font-semibold text-[#0E1B3D]'}`}>
+        <Dh /> {value.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
+    </div>
+  );
+}
+
+/* ---------- Billing Calculation table (per-DPW breakdown) ---------- */
+function BillingCalculationTable({ lines, total }: { lines: BillingLine[]; total: number }) {
+  return (
+    <div className="mt-2 rounded-2xl border border-[#E0EAFB] overflow-hidden">
+      <div className="bg-[#6B7280] text-white px-3 py-2 text-[10.5px] font-bold uppercase tracking-wider">
+        Billing calculation
+      </div>
+      <div className="bg-white divide-y divide-[#F3F4F6]">
+        {lines.map((l, i) => (
+          <div key={i} className="px-3 py-2.5 grid grid-cols-2 gap-2 text-[11.5px]">
+            <div className="col-span-2 flex items-center justify-between">
+              <span className="font-bold text-[#0E1B3D] truncate">{l.tariff}</span>
+              <span className="text-[#0E47A6] font-bold">AED {l.total.toLocaleString('en-AE')}</span>
+            </div>
+            <div className="text-[#6B7280]">Stuffing: <span className="text-[#33455F] font-semibold">{l.stuffing}</span></div>
+            <div className="text-[#6B7280] text-right">Type: <span className="text-[#33455F] font-semibold">{l.contrType}</span></div>
+            <div className="text-[#6B7280]">No of Contrs: <span className="text-[#33455F] font-semibold">{l.noOfContrs}</span></div>
+            <div className="text-[#6B7280] text-right">Rate: <span className="text-[#33455F] font-semibold">{l.rate}</span></div>
+            <div className="text-[#6B7280]">Gross: <span className="text-[#33455F] font-semibold">{l.gross}</span></div>
+            <div className="text-[#6B7280] text-right">Net: <span className="text-[#33455F] font-semibold">{l.net}</span></div>
+            <div className="text-[#6B7280]">VAT: <span className="text-[#33455F] font-semibold">{l.vatPct}% ({l.vatAmt})</span></div>
+          </div>
+        ))}
+        <div className="bg-[#F4F7FE] px-3 py-2.5 flex items-center justify-between">
+          <span className="text-[12px] font-bold text-[#0E1B3D]">Total</span>
+          <span className="text-[14px] font-bold text-[#0E47A6]">AED {total.toLocaleString('en-AE')}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- TLUC PAYMENT METHOD BOTTOM SHEET ---------- */
+type BillingLine = {
+  stuffing: string; tariff: string; contrType: string;
+  noOfContrs: number; rate: number; gross: number;
+  net: number; vatPct: number; vatAmt: number; total: number;
+};
+
+function TlucPaymentSheet({ records, totals, updateContainer, containerRowTotals, recordTotals, committed, isDirty, onCompute,
+  setAllocation, addAllocation, removeAllocation,
+  onShowBrn, onShowBilling,
+  onClose, onPaid }:
+  { records: TlucRecord[];
+    totals: { amount: number; vat: number; total: number; payingQty: number };
+    updateContainer: (dpwRef: string, idx: number, patch: Partial<TlucContainer>) => void;
+    containerRowTotals: (c: TlucContainer) => { amount: number; vat: number; total: number };
+    recordTotals: (r: TlucRecord) => { amount: number; vat: number; total: number; payingQty: number };
+    committed: Record<string, { lines: BillingLine[]; total: number; payingQty: number }>;
+    isDirty: (dpwRef: string) => boolean;
+    onCompute: (dpwRef: string) => void;
+    setAllocation: (dpwRef: string, cIdx: number, aIdx: number, patch: Partial<StuffingAlloc>) => void;
+    addAllocation: (dpwRef: string, cIdx: number) => void;
+    removeAllocation: (dpwRef: string, cIdx: number, aIdx: number) => void;
+    onShowBrn: (r: TlucRecord) => void;
+    onShowBilling: (r: TlucRecord) => void;
+    onClose: () => void;
+    onPaid?: () => void }) {
+  const [method, setMethod] = useState<'applepay'|'rosoom'|'advance'>('applepay');
+  const [paid, setPaid] = useState(false);
+  // Step layout: [overview]? + N reviews + payment
+  const hasOverview = records.length > 1;
+  const [step, setStep] = useState(0);
+  const reviewStartIdx = hasOverview ? 1 : 0;
+  const paymentStepIdx = reviewStartIdx + records.length;
+  const totalSteps = paymentStepIdx + 1;
+  const isOverviewStep = hasOverview && step === 0;
+  const isPaymentStep = step === paymentStepIdx;
+  const reviewIdx = isOverviewStep || isPaymentStep ? -1 : step - reviewStartIdx;
+  const refsLabel = records.length === 1
+    ? records[0].dpwRef
+    : `${records.length} DPW references`;
+
+  if (paid) {
+    return (
+      <div className="absolute inset-0 z-50 flex items-center justify-center px-5"
+        style={{ background: 'rgba(7, 16, 38, 0.55)', backdropFilter: 'blur(6px)' }}>
+        <div className="dt-pop relative w-full max-w-sm bg-white rounded-[28px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(7,16,38,0.55)] p-6 text-center">
+          <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center text-white shadow-[0_10px_24px_-8px_rgba(15,143,106,0.55)]"
+            style={{ background: 'linear-gradient(135deg, #10B981 0%, #0F8F6A 100%)' }}>
+            <CheckCircle2 size={28} strokeWidth={2.5} />
+          </div>
+          <div className="mt-3 text-[20px] font-bold text-[#0E1B3D]">Payment successful</div>
+          <div className="mt-1.5 text-[13.5px] text-[#4A5565] leading-relaxed">
+            <Dh /> {totals.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} paid for <span className="font-bold text-[#0E1B3D]">{refsLabel}</span>.
+          </div>
+          <button onClick={() => { onPaid?.(); onClose(); }}
+            className="dt-btn-primary w-full mt-5 text-white py-3.5 rounded-2xl font-bold uppercase tracking-wide text-[13px]">
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Wizard title — switches per step
+  const sheetTitle = isOverviewStep
+    ? 'Selected records'
+    : isPaymentStep
+    ? 'Confirm & pay'
+    : `Amend record ${records.length > 1 ? `(${reviewIdx + 1} of ${records.length})` : ''}`;
+
+  return (
+    <div className="absolute z-50 bg-[#F4F7FE] flex flex-col"
+      style={{ top: 0, left: 0, right: 0, bottom: -24 }}>
+      {/* Header */}
+      <div className="relative overflow-hidden dt-safe-top px-5 pt-3 pb-4 text-white shrink-0"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[280px] h-[280px] rounded-full opacity-25 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="relative flex items-center gap-3">
+          <button onClick={onClose}
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20"
+            aria-label="Close">
+            <X size={18} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">TLUC Payment</div>
+            <div className="text-[17px] font-bold leading-tight truncate">{sheetTitle}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6">
+      {/* Progress dots */}
+      <div className="flex items-center gap-1.5 mb-3">
+        {Array.from({ length: totalSteps }).map((_, i) => (
+          <span key={i}
+            className="h-1.5 rounded-full transition-all"
+            style={{
+              width: i === step ? 22 : 6,
+              background: i <= step ? '#1360D2' : '#D1D5DC',
+            }} />
+        ))}
+        <div className="flex-1" />
+        <div className="text-[10.5px] uppercase tracking-wider text-[#6B7280] font-bold">
+          Step {step + 1} of {totalSteps}
+        </div>
+      </div>
+
+      {isOverviewStep && (
+        <div className="space-y-3">
+          <div className="text-[12.5px] text-[#4A5565]">
+            You're paying for <span className="font-bold text-[#0E1B3D]">{records.length}</span> records. Review the details below, then amend each record's containers.
+          </div>
+          <div className="space-y-2.5">
+            {records.map((r, idx) => {
+              const t = recordTotals(r);
+              const statusStyle = r.status === 'Partially Paid'
+                ? { bg: '#FFF7ED', border: '#FFD6A8', fg: '#D26A24', dot: '#F59E0B' }
+                : { bg: '#FEECEC', border: '#F5B5AA', fg: '#B42318', dot: '#EF4444' };
+              return (
+                <div key={r.dpwRef} className="bg-white rounded-2xl border border-[#E0EAFB] overflow-hidden">
+                  <div className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">DPW Ref</div>
+                        <div className="text-[14px] font-bold text-[#0E1B3D]">{r.dpwRef}</div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase tracking-wider shrink-0"
+                        style={{ background: statusStyle.bg, color: statusStyle.fg, border: `1px solid ${statusStyle.border}` }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusStyle.dot }} />
+                        {r.status}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                      <div><span className="text-[#6B7280]">Agent · </span><span className="font-semibold text-[#33455F]">{r.agentRef}</span></div>
+                      <div><span className="text-[#6B7280]">Type · </span><span className="font-semibold text-[#33455F]">{r.requestType}</span></div>
+                      <div><span className="text-[#6B7280]">BRN · </span><span className="font-semibold text-[#33455F]">{r.brnDate}</span></div>
+                      <div><span className="text-[#6B7280]">Req Qty · </span><span className="font-semibold text-[#33455F]">{r.reqQty}</span></div>
+                      <div><span className="text-[#6B7280]">Paying · </span><span className="font-semibold text-[#33455F]">{t.payingQty}</span></div>
+                      <div><span className="text-[#6B7280]">Shipper · </span><span className="font-semibold text-[#33455F] truncate">{r.shipper}</span></div>
+                    </div>
+                    <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-[#F4F7FE] rounded-xl py-1.5">
+                        <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-bold">Amount</div>
+                        <div className="text-[12px] font-bold text-[#0E1B3D] mt-0.5">{t.amount.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      </div>
+                      <div className="bg-[#F4F7FE] rounded-xl py-1.5">
+                        <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-bold">VAT</div>
+                        <div className="text-[12px] font-bold text-[#0E1B3D] mt-0.5">{t.vat.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      </div>
+                      <div className="bg-[#EAF1FE] rounded-xl py-1.5">
+                        <div className="text-[9.5px] uppercase tracking-wider text-[#0E47A6] font-bold">Total</div>
+                        <div className="text-[12px] font-bold text-[#0E47A6] mt-0.5">{t.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Amend link per DPW card */}
+                  <button onClick={() => setStep(reviewStartIdx + idx)}
+                    className="w-full border-t border-[#F3F4F6] py-2.5 text-[11.5px] font-semibold text-[#1360D2] hover:bg-[#F4F7FE] flex items-center justify-center gap-1">
+                    Amend containers <ChevronRight size={12} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Grand totals across all selected DPW records */}
+          <div className="rounded-2xl bg-white border border-[#E0EAFB] shadow-[0_8px_18px_-14px_rgba(14,27,61,0.18)] p-4 space-y-2.5">
+            <div className="text-[10.5px] uppercase tracking-wider text-[#0E47A6] font-bold">Grand total</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-[#F4F7FE] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">Paying Qty</div>
+                <div className="text-[16px] font-bold text-[#0E1B3D] mt-0.5">{totals.payingQty}</div>
+              </div>
+              <div className="rounded-xl bg-[#F4F7FE] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">Amount</div>
+                <div className="text-[16px] font-bold text-[#0E1B3D] mt-0.5 flex items-center gap-0.5">
+                  <Dh /> {totals.amount.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#F4F7FE] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">VAT</div>
+                <div className="text-[16px] font-bold text-[#0E1B3D] mt-0.5 flex items-center gap-0.5">
+                  <Dh /> {totals.vat.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="rounded-xl bg-[#EAF1FE] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[#0E47A6] font-bold">Total Amount</div>
+                <div className="text-[16px] font-bold text-[#0E47A6] mt-0.5 flex items-center gap-0.5">
+                  <Dh /> {totals.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={() => setStep(paymentStepIdx)}
+            className="dt-btn-primary w-full text-white py-3.5 rounded-2xl font-bold uppercase tracking-wide text-[13px] flex items-center justify-center gap-2">
+            Continue to payment <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+
+      {!isOverviewStep && !isPaymentStep && (() => {
+        const r = records[reviewIdx];
+        const dirty = isDirty(r.dpwRef);
+        const recordCommitted = committed[r.dpwRef];
+        const liveTotal = r.containers.reduce((s, c) => s + containerRowTotals(c).total, 0);
+        return (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-[#F4F7FE] border border-[#E0EAFB] p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-[#1360D2]"
+                style={{ background: 'linear-gradient(135deg, #EAF1FE, #DCE7FB)' }}>
+                <Ship size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10.5px] uppercase tracking-wider text-[#6B7280] font-bold">DPW Reference</div>
+                <div className="text-[14px] font-bold text-[#0E1B3D] truncate">{r.dpwRef}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10.5px] uppercase tracking-wider text-[#6B7280] font-bold">{dirty ? 'Pending' : 'Total'}</div>
+                <div className={`text-[14px] font-bold flex items-center gap-0.5 ${dirty ? 'text-[#B45309]' : 'text-[#0E1B3D]'}`}>
+                  <Dh /> {(dirty || !recordCommitted ? liveTotal : recordCommitted.total).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+
+            {/* Editable containers */}
+            <div className="text-[10.5px] uppercase tracking-wider text-[#0E47A6] font-bold">Containers</div>
+            <div className="space-y-2.5">
+              {r.containers.map((c, idx) => {
+                const row = containerRowTotals(c);
+                const allocatedQty = c.paying.reduce((s, a) => s + a.qty, 0);
+                const remaining = c.pending - allocatedQty;
+                const showRowTotal = !dirty && recordCommitted; // show committed amount; else "—"
+                return (
+                  <div key={idx} className="rounded-2xl border border-[#E0EAFB] p-3 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[13px] font-bold text-[#0E1B3D]">{c.type}</div>
+                    </div>
+                    {/* Total Qty · Paid Qty · Pending for payment */}
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-[#F4F7FE] px-3 py-2 text-center">
+                        <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-bold">Total Qty</div>
+                        <div className="text-[14px] font-bold text-[#0E1B3D] mt-0.5">{c.totalQty}</div>
+                      </div>
+                      <div className="rounded-xl bg-[#ECFDF5] px-3 py-2 text-center">
+                        <div className="text-[9.5px] uppercase tracking-wider text-[#047857] font-bold">Paid Qty</div>
+                        <div className="text-[14px] font-bold text-[#0E1B3D] mt-0.5">{c.paidQty}</div>
+                      </div>
+                      <div className="rounded-xl bg-[#FEF6E7] px-3 py-2 text-center">
+                        <div className="text-[9.5px] uppercase tracking-wider text-[#B45309] font-bold">Pending</div>
+                        <div className="text-[14px] font-bold text-[#0E1B3D] mt-0.5">{c.pending}</div>
+                      </div>
+                    </div>
+
+                    {/* Stuffing allocations — multi-row */}
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider text-[#0E47A6] font-bold">Stuffing locations</span>
+                        <span className="text-[10px] text-[#6B7280]">
+                          Allocated <span className="font-bold text-[#0E1B3D]">{allocatedQty}</span> / {c.pending}
+                          {remaining > 0 && <span className="text-[#B45309] font-bold"> · {remaining} unassigned</span>}
+                        </span>
+                      </div>
+                      {c.paying.map((alloc, aIdx) => (
+                        <div key={aIdx} className="flex items-center gap-2">
+                          <select value={alloc.stuffing}
+                            onChange={(e) => setAllocation(r.dpwRef, idx, aIdx, { stuffing: e.target.value as Stuffing })}
+                            className="flex-1 bg-[#F4F7FE] border border-[#D5E2F8] rounded-xl px-3 py-2 text-[12.5px] font-semibold text-[#0E47A6] outline-none focus:border-[#1360D2]">
+                            <option value="TOWN/FREE ZONE">TOWN/FREE ZONE</option>
+                            <option value="FREE ZONE">FREE ZONE</option>
+                            <option value="TOWN">TOWN</option>
+                          </select>
+                          <input type="number" min={0} max={alloc.qty + remaining} value={alloc.qty}
+                            onChange={(e) => {
+                              const target = Math.max(0, parseInt(e.target.value) || 0);
+                              const maxAllowed = alloc.qty + remaining;
+                              setAllocation(r.dpwRef, idx, aIdx, { qty: Math.min(maxAllowed, target) });
+                            }}
+                            className="w-[78px] text-center bg-[#F4F7FE] border border-[#D5E2F8] rounded-xl px-2 py-2 text-[14px] font-bold text-[#0E47A6] outline-none focus:border-[#1360D2]" />
+                          {c.paying.length > 1 && (
+                            <button onClick={() => removeAllocation(r.dpwRef, idx, aIdx)}
+                              className="w-9 h-9 rounded-xl bg-[#FEECEC] text-[#B42318] flex items-center justify-center hover:bg-[#FCD0D0]"
+                              aria-label="Remove allocation">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={() => addAllocation(r.dpwRef, idx)}
+                        disabled={remaining <= 0}
+                        className={`w-full text-[11.5px] font-bold uppercase tracking-wider py-2 rounded-xl border-dashed border transition flex items-center justify-center gap-1 ${
+                          remaining <= 0
+                            ? 'border-[#E0EAFB] text-[#9CA3AF] cursor-not-allowed'
+                            : 'border-[#B7CDF1] text-[#1360D2] hover:bg-[#EAF1FE]'}`}>
+                        <Plus size={12} /> Add another stuffing location
+                      </button>
+                    </div>
+
+                    {/* Token Paying For */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 items-end">
+                      <label className="block">
+                        <span className="block text-[10px] uppercase tracking-wider text-[#6B7280] font-bold mb-1">Token Paying For</span>
+                        <select value={c.tokenPayingFor}
+                          onChange={(e) => updateContainer(r.dpwRef, idx, { tokenPayingFor: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-[#F4F7FE] border border-[#D5E2F8] rounded-xl px-3 py-2 text-[12.5px] font-semibold text-[#0E47A6] outline-none focus:border-[#1360D2]">
+                          {Array.from({ length: c.pending + 1 }, (_, i) => (
+                            <option key={i} value={i}>{i}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="rounded-xl bg-[#EAF1FE] px-3 py-2 flex flex-col items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-[#0E47A6] font-bold">Total Amount</span>
+                        <span className="text-[13px] font-bold text-[#0E47A6] flex items-center gap-0.5">
+                          <Dh /> {showRowTotal
+                            ? row.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Compute charges */}
+            <button onClick={() => onCompute(r.dpwRef)}
+              className={`w-full py-3 rounded-2xl font-bold text-[12.5px] uppercase tracking-wide flex items-center justify-center gap-2 transition
+                ${dirty || !recordCommitted
+                  ? 'text-white shadow-[0_12px_24px_-10px_rgba(180,83,9,0.45)]'
+                  : 'dt-btn-secondary'}`}
+              style={(dirty || !recordCommitted) ? { background: 'linear-gradient(90deg, #D97706, #F59E0B, #D97706)' } : undefined}>
+              {dirty || !recordCommitted ? <AlertCircle size={14} /> : <Check size={14} />}
+              {dirty || !recordCommitted ? 'Compute charges' : 'Charges computed'}
+            </button>
+
+            {/* Computed total summary */}
+            {recordCommitted && (
+              <div className="rounded-2xl bg-white border border-[#E0EAFB] p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12.5px] text-[#4A5565]">Computed total</span>
+                  <span className={`text-[16px] font-bold flex items-center gap-0.5 ${dirty ? 'line-through text-[#9CA3AF]' : 'text-[#0E47A6]'}`}>
+                    <Dh /> {recordCommitted.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {dirty && (
+                  <div className="mt-1 text-[11px] text-[#B45309] font-medium">
+                    Quantities changed — recompute to update the total.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* BRN details + Billing calculation flyout buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => onShowBrn(r)}
+                className="bg-white rounded-2xl border border-[#E0EAFB] px-3 py-3 flex items-center justify-between hover:bg-[#F4F7FE]">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Info size={13} className="text-[#1360D2] shrink-0" />
+                  <span className="text-[11.5px] font-semibold text-[#0E1B3D] truncate">View BRN details</span>
+                </div>
+                <ChevronRight size={13} className="text-gray-500 shrink-0" />
+              </button>
+              <button onClick={() => onShowBilling(r)}
+                disabled={!recordCommitted}
+                className={`rounded-2xl border px-3 py-3 flex items-center justify-between transition ${
+                  recordCommitted
+                    ? 'bg-white border-[#E0EAFB] hover:bg-[#F4F7FE]'
+                    : 'bg-[#F4F7FE] border-[#EAF0FA] cursor-not-allowed opacity-60'}`}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Info size={13} className="text-[#1360D2] shrink-0" />
+                  <span className="text-[11.5px] font-semibold text-[#0E1B3D] truncate">Billing calculation</span>
+                </div>
+                <ChevronRight size={13} className="text-gray-500 shrink-0" />
+              </button>
+            </div>
+
+            {/* Dirty hint (compute optional but recommended) */}
+            {dirty && (
+              <div className="rounded-xl bg-[#FEF6E7] border border-[#FCD9A5] px-3 py-2 text-[11px] text-[#7A5A11] leading-relaxed">
+                You have unsaved changes. Click <span className="font-bold">Compute charges</span> to apply them, otherwise the previous total will be used.
+              </div>
+            )}
+
+            {/* Wizard nav */}
+            <div className="flex items-center gap-2.5 pt-1">
+              {step > 0 && (
+                <button onClick={() => setStep(s => Math.max(0, s - 1))}
+                  className="dt-btn-secondary flex-1 py-3 rounded-2xl font-bold text-[13px] uppercase tracking-wide flex items-center justify-center gap-1.5">
+                  <ChevronLeft size={14} /> Back
+                </button>
+              )}
+              <button onClick={() => setStep(s => s + 1)}
+                className="dt-btn-primary flex-[1.4] text-white py-3.5 rounded-2xl font-bold text-[13px] uppercase tracking-wide flex items-center justify-center gap-1.5">
+                {reviewIdx < records.length - 1 ? 'Next record' : 'Continue to payment'} <ArrowRight size={14} />
+              </button>
+            </div>
+
+            {/* Skip to payment — fast-forward */}
+            {reviewIdx < records.length - 1 && (
+              <div className="text-center pt-1">
+                <button onClick={() => setStep(paymentStepIdx)}
+                  className="text-[12px] font-semibold text-[#4A5565] hover:text-[#1360D2]">
+                  Skip remaining · go to payment
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {isPaymentStep && (
+        <div className="space-y-4">
+          {/* Summary across all records */}
+          <div className="rounded-2xl bg-[#F4F7FE] border border-[#E0EAFB] p-4">
+            {records.length === 1 ? (
+              <div className="flex items-center justify-between text-[12px] text-[#6B7280]">
+                <span>DPW Ref</span>
+                <span className="font-bold text-[#0E1B3D]">{records[0].dpwRef}</span>
+              </div>
+            ) : (
+              <div className="space-y-1.5 text-[12px]">
+                <div className="text-[10.5px] uppercase tracking-wider text-[#6B7280] font-bold">Paying {records.length} records</div>
+                {records.map(r => {
+                  const t = recordTotals(r);
+                  const c = committed[r.dpwRef];
+                  return (
+                    <div key={r.dpwRef} className="bg-white rounded-xl border border-[#E0EAFB] px-3 py-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-[12px] font-bold text-[#0E1B3D]">DPW {r.dpwRef}</div>
+                          <div className="text-[10.5px] text-[#6B7280]">{t.payingQty} container{t.payingQty !== 1 ? 's' : ''}</div>
+                        </div>
+                        <span className="font-bold text-[#0E1B3D] flex items-center gap-0.5 text-[13px]">
+                          <Dh /> {t.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <button onClick={() => onShowBrn(r)}
+                          className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#1360D2]">
+                          <Info size={11} /> View BRN details
+                        </button>
+                        {c && (
+                          <button onClick={() => onShowBilling(r)}
+                            className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-[#1360D2]">
+                            <Info size={11} /> Billing calculation
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="border-t border-[#DCE7FB] mt-3 pt-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-[12.5px]">
+                <span className="text-[#4A5565]">Paying for</span>
+                <span className="font-bold text-[#0E1B3D]">{totals.payingQty} container{totals.payingQty !== 1 ? 's' : ''}</span>
+              </div>
+              <SummaryLine label="Grand total" value={totals.total} bold />
+            </div>
+          </div>
+
+          {/* Mode of Payment */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-bold text-[13px] text-[#0E1B3D]">Mode of Payment</span>
+              <span className="bg-gray-500 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">Default</span>
+            </div>
+            <button onClick={() => setMethod('applepay')}
+              className={`w-full bg-white border rounded-xl py-3.5 flex items-center justify-center gap-2 shadow-sm transition
+                ${method === 'applepay' ? 'border-black' : 'border-gray-200'}`}>
+              <span className="font-medium text-black">Pay with</span>
+              <span className="inline-flex items-center gap-1 text-black">
+                <svg width="14" height="17" viewBox="0 0 14 17" fill="currentColor" aria-hidden="true">
+                  <path d="M11.182 9.092c-.02-2.07 1.69-3.063 1.768-3.111-.965-1.41-2.464-1.603-2.998-1.625-1.276-.13-2.49.752-3.137.752-.66 0-1.66-.737-2.733-.715-1.404.021-2.701.816-3.42 2.072-1.46 2.527-.373 6.262 1.054 8.314.699 1.005 1.529 2.131 2.616 2.091 1.05-.043 1.447-.679 2.717-.679 1.27 0 1.626.679 2.733.654 1.13-.022 1.844-1.022 2.534-2.031.798-1.165 1.125-2.293 1.144-2.352-.025-.012-2.196-.844-2.218-3.37zM9.222 3.06C9.79 2.36 10.176 1.388 10.07.42c-.83.034-1.836.555-2.424 1.254-.527.617-.988 1.605-.864 2.553.928.071 1.873-.473 2.44-1.166z"/>
+                </svg>
+                <span className="font-bold text-lg" style={{ fontFamily: 'system-ui' }}>Pay</span>
+              </span>
+            </button>
+            <div className="text-[11.5px] font-bold text-[#696F83] mt-3 mb-1.5 uppercase tracking-wider">Other Methods</div>
+            <div className="space-y-2">
+              <button onClick={() => setMethod('rosoom')}
+                className={`w-full bg-white border rounded-xl py-3 flex items-center gap-3 px-3 transition
+                  ${method === 'rosoom' ? 'border-[#1360D2]' : 'border-gray-200'}`}>
+                <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                  <Building2 size={18} className="text-[#1360D2]" />
+                </div>
+                <span className="font-medium text-[#1360D2] text-[14px]">Rosoom Payment Gateway</span>
+              </button>
+              <button onClick={() => setMethod('advance')}
+                className={`w-full bg-white border rounded-xl py-3 flex items-center gap-3 px-3 transition
+                  ${method === 'advance' ? 'border-[#1360D2]' : 'border-gray-200'}`}>
+                <div className="w-9 h-9 rounded-lg bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                  <Wallet size={18} className="text-[#1360D2]" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="font-medium text-[#1360D2] text-[14px]">Pay from Advance Deposit</div>
+                  <div className="text-[11px] text-[#6B7280]">
+                    Balance: <span className="font-bold text-[#0E1B3D]"><Dh /> 77,001.18</span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Wizard nav */}
+          <div className="flex items-center gap-2.5 pt-1">
+            <button onClick={() => setStep(s => Math.max(0, s - 1))}
+              className="dt-btn-secondary flex-1 py-3 rounded-2xl font-bold text-[13px] uppercase tracking-wide flex items-center justify-center gap-1.5">
+              <ChevronLeft size={14} /> Back
+            </button>
+            <button onClick={() => setPaid(true)}
+              className="dt-btn-primary flex-[1.4] text-white py-3.5 rounded-2xl font-bold uppercase tracking-wide text-[13px] flex items-center justify-center gap-2">
+              Pay <Dh /> {totals.total.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </button>
+          </div>
+        </div>
+      )}
+      </div>
+    </div>
   );
 }
