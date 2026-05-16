@@ -21,7 +21,8 @@ type Screen =
   | 'forgotPassword' | 'verifyCode' | 'resetPassword' | 'notifications' | 'notificationsSettings' | 'subscription'
   | 'cargoMgmt' | 'invoiceDownload'
   | 'tlucPayments'
-  | 'gatePassPayment';
+  | 'gatePassPayment'
+  | 'changePassword';
 
 type View = 'grid' | 'list';
 type ModalKind = null | 'advanceDeposit' | 'autoTopup' | 'prepaidTopup' | 'prepaidEmpty' | 'addPrepaidCard' | 'prepaidCardCreated' | 'deletePrepaidCard' | 'paySuccess'
@@ -43,6 +44,8 @@ export default function App() {
   })();
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [gatePassOrigin, setGatePassOrigin] = useState<'dashboard'|'cargoMgmt'>('dashboard');
+  const [forgotPasswordOrigin, setForgotPasswordOrigin] = useState<'login'|'profile'>('login');
+  const [customerProfileOrigin, setCustomerProfileOrigin] = useState<'login'|'profile'>('login');
   const [hasCompletedFirstRun, setHasCompletedFirstRun] = useState(initialScreen !== 'login' && initialScreen !== 'onboarding');
   const [view, setView] = useState<View>('grid');
   const [showCustomize, setShowCustomize] = useState(initialCustomize);
@@ -128,12 +131,12 @@ export default function App() {
               setScreen('onboarding');
             }}
             onLoginWithPassword={() => setLoginMode('initial')}
-            onForgot={() => setScreen('forgotPassword')} />
+            onForgot={() => { setForgotPasswordOrigin('login'); setScreen('forgotPassword'); }} />
         )}
         {screen === 'customerProfile' && (
           <CustomerProfile selected={profileIdx} onSelect={setProfileIdx}
             defaultIdx={defaultProfileIdx} onSetDefault={setDefaultProfileIdx}
-            onBack={() => setScreen('login')}
+            onBack={() => setScreen(customerProfileOrigin)}
             onContinue={() => setScreen('accessibility')} />
         )}
         {screen === 'accessibility' && (
@@ -164,7 +167,16 @@ export default function App() {
         {screen === 'services' && (
           <Services onTab={(t) => setScreen(t)}
             onOpenPayments={() => setScreen('payments')}
-            onOpenCargoMgmt={() => setScreen('cargoMgmt')} />
+            onOpenCargoMgmt={() => setScreen('cargoMgmt')}
+            onAdvanceDeposit={() => setModal('advanceDeposit')}
+            onPrepaidCard={() => setModal(hasPrepaidCard ? 'prepaidTopup' : 'prepaidEmpty')}
+            onImportFCL={() => setScreen('importFCL')}
+            onTluc={() => setScreen('tlucPayments')}
+            onVessels={() => setScreen('vessels')}
+            onContainers={() => setScreen('containers')}
+            onRequestDDO={() => setDdoSearchOpen(true)}
+            onCustomsTrack={() => setScreen('customsTrack')}
+            onGatePass={() => { setGatePassOrigin('dashboard'); setScreen('gatePassList'); }} />
         )}
         {screen === 'cargoMgmt' && (
           <CargoManagement onBack={() => setScreen('services')}
@@ -179,7 +191,8 @@ export default function App() {
           <Profile onTab={(t) => setScreen(t)}
             biometric={biometric} setBiometric={setBiometric}
             onSignOut={goLogin}
-            onResetPassword={() => setScreen('forgotPassword')}
+            onResetPassword={() => setScreen('changePassword')}
+            onChangeCustomer={() => { setCustomerProfileOrigin('profile'); setScreen('customerProfile'); }}
             onNotificationsSettings={() => setScreen('notificationsSettings')}
             onRenewNow={() => setScreen('subscription')} />
         )}
@@ -286,7 +299,7 @@ export default function App() {
         {screen === 'containers' && <Containers onBack={() => setScreen('dashboard')} />}
         {screen === 'vessels' && <Vessels onBack={() => setScreen('dashboard')} />}
         {screen === 'forgotPassword' && (
-          <ForgotPassword onBack={() => setScreen('login')}
+          <ForgotPassword onBack={() => setScreen(forgotPasswordOrigin)}
             onContinue={() => setScreen('verifyCode')} />
         )}
         {screen === 'verifyCode' && (
@@ -296,6 +309,9 @@ export default function App() {
         {screen === 'resetPassword' && (
           <ResetPassword onBack={() => setScreen('verifyCode')}
             onReset={() => setModal('passwordResetSuccess')} />
+        )}
+        {screen === 'changePassword' && (
+          <ChangePassword onBack={() => setScreen('profile')} onSuccess={() => { setScreen('profile'); }} />
         )}
         {screen === 'notifications' && (
           <Notifications onBack={() => setScreen('dashboard')} />
@@ -1380,7 +1396,7 @@ function DashboardHeader({ view, setView, onOpenSettings, onBell }:
         <div className="flex items-center gap-2">
           <button data-tour-anchor="settings" onClick={onOpenSettings}
             className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/10 flex items-center justify-center hover:bg-white/20">
-            <Settings size={17} />
+            <Plus size={17} />
           </button>
           <button data-tour-anchor="bell" onClick={onBell}
             className="relative w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/10 flex items-center justify-center hover:bg-white/20">
@@ -1504,85 +1520,164 @@ function RecentRow({ icon: Icon, title, sub, onClick }: any) {
 }
 
 /* ---------- 6. SERVICES ---------- */
-function Services({ onTab, onOpenPayments, onOpenCargoMgmt }:
-  { onTab: (t: Screen) => void; onOpenPayments: () => void; onOpenCargoMgmt: () => void }) {
-  const [tab, setTab] = useState<'all'|'payments'|'tracking'|'requests'|'hr'|'cargoMgmt'>('all');
-  const cats = [
-    { label: 'Payments', n: 2, icon: Wallet, onClick: onOpenPayments },
-    { label: 'Tracking', n: 2, icon: Truck },
-    { label: 'Cargo Clearance', n: 3, icon: Package },
-    { label: 'Requests', n: 4, icon: FileText },
-    { label: 'Cargo Management', n: 4, icon: Boxes, onClick: onOpenCargoMgmt },
+function Services({ onTab, onOpenPayments, onOpenCargoMgmt, onAdvanceDeposit, onPrepaidCard, onImportFCL, onTluc, onVessels, onContainers, onRequestDDO, onCustomsTrack, onGatePass }:
+  { onTab: (t: Screen) => void; onOpenPayments: () => void; onOpenCargoMgmt: () => void;
+    onAdvanceDeposit: () => void; onPrepaidCard: () => void; onImportFCL: () => void; onTluc: () => void;
+    onVessels: () => void; onContainers: () => void; onRequestDDO: () => void;
+    onCustomsTrack: () => void; onGatePass: () => void }) {
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+
+  type SvcGroup = { title: string; icon: any; count: number; services: { label: string; desc: string; icon: any; onClick?: () => void }[] };
+  const groups: SvcGroup[] = [
+    {
+      title: 'Payments', icon: Wallet, count: 4,
+      services: [
+        { label: 'Advance Deposit',  desc: 'Top up & manage deposit balance', icon: Wallet,     onClick: onAdvanceDeposit },
+        { label: 'Prepaid Card',     desc: 'Manage your prepaid card',         icon: CreditCard, onClick: onPrepaidCard },
+        { label: 'Import FCL Bills', desc: 'View & pay FCL declarations',      icon: FileText,   onClick: onImportFCL },
+        { label: 'TLUC Payments',    desc: 'Pay TLUC BRN charges',             icon: Ship,       onClick: onTluc },
+      ],
+    },
+    {
+      title: 'Carrier Management', icon: Truck, count: 2,
+      services: [
+        { label: 'Vessels',    desc: 'Track and pin your vessels',    icon: Ship,    onClick: onVessels },
+        { label: 'Containers', desc: 'Track and pin your containers', icon: Package, onClick: onContainers },
+      ],
+    },
+    {
+      title: 'Cargo Management', icon: Boxes, count: 1,
+      services: [
+        { label: 'Trade+ · DDO', desc: 'Request & track delivery orders', icon: FileCheck, onClick: onRequestDDO },
+      ],
+    },
+    {
+      title: 'Cargo Clearance', icon: ClipboardList, count: 1,
+      services: [
+        { label: 'Customs Declaration', desc: 'Track customs clearance status', icon: ClipboardList, onClick: onCustomsTrack },
+      ],
+    },
+    {
+      title: 'Gate Management', icon: MapPin, count: 1,
+      services: [
+        { label: 'Gate Pass', desc: 'Manage & download gate passes', icon: MapPin, onClick: onGatePass },
+      ],
+    },
   ];
+
+  const activeGroup = groups.find(g => g.title === selectedGroup) ?? null;
+
+  const bgStyle = {
+    background:
+      'radial-gradient(circle at 18% 0%, rgba(199,216,244,0.55) 0%, transparent 50%),' +
+      'radial-gradient(circle at 88% 14%, rgba(180,210,255,0.45) 0%, transparent 50%),' +
+      'linear-gradient(180deg, #F4F7FE 0%, #FFFFFF 60%, #F4F7FE 100%)',
+  };
+
+  /* ---- SERVICE DETAIL VIEW ---- */
+  if (activeGroup) {
+    const GroupIcon = activeGroup.icon;
+    return (
+      <div className="min-h-full flex flex-col" style={bgStyle}>
+        <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+          style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+          <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+          <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+          <div className="relative flex items-center gap-3">
+            <button onClick={() => setSelectedGroup(null)}
+              className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex-1">
+              <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">All Services</div>
+              <div className="text-[18px] font-bold leading-tight">{activeGroup.title}</div>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+              <GroupIcon size={17} />
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 -mt-12 relative z-20">
+          <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] overflow-hidden">
+            {activeGroup.services.map((svc, i) => {
+              const SvcIcon = svc.icon;
+              return (
+                <button key={svc.label} onClick={svc.onClick}
+                  className={`w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#F8FAFF] transition-colors ${i > 0 ? 'border-t border-[#EAF0FA]' : ''}`}>
+                  <div className="w-11 h-11 rounded-xl bg-[#EAF1FE] flex items-center justify-center shrink-0">
+                    <SvcIcon size={20} className="text-[#1360D2]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[#1E2939] text-[15px]">{svc.label}</div>
+                    <div className="text-[#6A7282] text-[12px] mt-0.5">{svc.desc}</div>
+                  </div>
+                  <ChevronRight size={16} className="text-[#C7D5EA] shrink-0" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <BottomNav active="services" onTab={onTab} />
+      </div>
+    );
+  }
+
+  /* ---- GROUP GRID VIEW ---- */
   return (
-    <div className="bg-[#F8F9FA] min-h-full flex flex-col">
-      <div className="bg-[#0E1B3D] dt-safe-top text-white pt-6 pb-4 px-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative w-11 h-11 rounded-xl bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] flex items-center justify-center font-bold">
-              A
-              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#14C9A9] border-2 border-white rounded-full" />
-            </div>
-            <div>
-              <div className="font-bold">Ahmed</div>
-              <div className="text-xs opacity-80">Agent Code : 123456</div>
-            </div>
+    <div className="min-h-full flex flex-col" style={bgStyle}>
+
+      {/* Hero header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-20 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center gap-3">
+          <div className="flex-1">
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Dubai Trade</div>
+            <div className="text-[18px] font-bold leading-tight">All Services</div>
           </div>
-          <div className="flex items-center gap-2">
-            <Settings size={20} />
-            <Bell size={20} />
-          </div>
-        </div>
-        <div className="mt-4">
-          <div className="text-lg font-bold">All Services</div>
-          <div className="text-[11px] opacity-80">13 services available</div>
-        </div>
-        <div className="mt-3 bg-white rounded-lg flex items-center gap-2 px-3 py-2">
-          <Search size={14} className="text-gray-500" />
-          <input placeholder="Search services..."
-            className="flex-1 text-xs outline-none text-gray-700" />
-        </div>
-      </div>
-      <div className="bg-white border-b border-gray-100 px-6 py-3 flex gap-2 overflow-x-auto">
-        {[
-          { k: 'all', t: 'All', n: 13 },
-          { k: 'payments', t: 'Payments', n: 2 },
-          { k: 'tracking', t: 'Tracking', n: 2 },
-          { k: 'requests', t: 'Requests', n: 4 },
-          { k: 'cargoMgmt', t: 'Cargo Mgmt', n: 4 },
-          { k: 'hr', t: 'HR', n: 1 },
-        ].map(c => (
-          <button key={c.k} onClick={() => setTab(c.k as any)}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-[10px] font-bold ${
-              tab === c.k ? 'bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] text-white' : 'bg-gray-100 text-gray-600'}`}>
-            {c.t} <span className={tab === c.k ? 'text-white/80' : 'text-gray-500'}>({c.n})</span>
+          <button className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <Bell size={17} />
           </button>
-        ))}
+        </div>
       </div>
-      <div className="p-6 grid grid-cols-2 gap-3">
-        {cats.map(c => {
-          const Icon = c.icon;
+
+      {/* Floating search — kept for UX consistency, clears on group open */}
+      <div className="px-5 -mt-12 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-2 flex items-center">
+          <Search size={16} className="ml-2 mr-1 text-[#99A1AF] shrink-0" />
+          <span className="text-[13.5px] text-[#99A1AF] py-2.5 pl-1">Search services...</span>
+        </div>
+      </div>
+
+      {/* Group cards grid */}
+      <div className="px-5 pt-5 pb-24 grid grid-cols-2 gap-3">
+        {groups.map(group => {
+          const GroupIcon = group.icon;
           return (
-            <button key={c.label} onClick={c.onClick}
-              className="bg-white border border-gray-200 rounded-2xl py-5 flex flex-col items-center gap-3 hover:shadow">
-              <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center text-[#1360D2]">
-                <Icon size={28} />
+            <button key={group.title} onClick={() => setSelectedGroup(group.title)}
+              className="bg-white border border-[#EAF0FA] rounded-2xl py-6 px-3 flex flex-col items-center gap-3 shadow-[0_4px_12px_-6px_rgba(14,27,61,0.1)] hover:border-[#B7CDF1] hover:shadow-md transition-all">
+              <div className="w-14 h-14 rounded-2xl bg-[#EAF1FE] flex items-center justify-center text-[#1360D2]">
+                <GroupIcon size={26} />
               </div>
-              <div className="text-[17px] font-semibold text-[#27314B]">{c.label}</div>
-              <div className="text-xs text-[#7F8A9F]">{c.n} services</div>
+              <div className="text-[13px] font-bold text-[#1E2939] text-center leading-tight">{group.title}</div>
+              <div className="text-[11px] text-[#6A7282]">{group.count} service{group.count !== 1 ? 's' : ''}</div>
             </button>
           );
         })}
       </div>
+
       <BottomNav active="services" onTab={onTab} />
     </div>
   );
 }
 
 /* ---------- 7. PROFILE ---------- */
-function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, onNotificationsSettings, onRenewNow }:
+function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, onChangeCustomer, onNotificationsSettings, onRenewNow }:
   { onTab: (t: Screen) => void; biometric: boolean; setBiometric: (v: boolean) => void; onSignOut: () => void;
-    onResetPassword: () => void; onNotificationsSettings: () => void; onRenewNow: () => void }) {
+    onResetPassword: () => void; onChangeCustomer: () => void; onNotificationsSettings: () => void; onRenewNow: () => void }) {
   return (
     <div className="bg-gradient-to-b from-[#F8F9FB] to-[#EEF2F7] min-h-full flex flex-col">
       <div className="bg-[#0E1B3D] dt-safe-top pb-20 px-6 relative overflow-hidden">
@@ -1614,7 +1709,7 @@ function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, o
             <div className="text-[11px] font-semibold tracking-wider text-[#7F8A9F] uppercase">Customer</div>
             <div className="text-[#27314B] font-bold text-sm">M0042-CLEARING AGENT-MAERSK...</div>
           </div>
-          <button className="text-[#1360D2] font-bold text-xs">CHANGE</button>
+          <button onClick={onChangeCustomer} className="text-[#1360D2] font-bold text-xs">CHANGE</button>
         </div>
 
         <div>
@@ -5276,6 +5371,133 @@ function ResetPassword({ onBack, onReset }: { onBack: () => void; onReset: () =>
         Reset password <ArrowRight size={18} />
       </button>
     </AuthShell>
+  );
+}
+
+/* ---------- CHANGE PASSWORD (from profile) ---------- */
+function ChangePassword({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void }) {
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [done, setDone] = useState(false);
+
+  const mismatch = confirm.length > 0 && newPw !== confirm;
+  const canSubmit = current.length > 0 && newPw.length >= 6 && newPw === confirm;
+
+  if (done) {
+    return (
+      <div className="bg-[#F2F5FB] flex flex-col items-center justify-center px-6" style={{ height: '100%' }}>
+        <div className="w-full max-w-sm flex flex-col items-center text-center gap-6">
+          <div className="size-28 rounded-full bg-[#D1FAE5] flex items-center justify-center shadow-[0_8px_32px_rgba(16,185,129,0.25)]">
+            <div className="size-20 rounded-full bg-[#A7F3D0] flex items-center justify-center">
+              <Check size={40} className="text-[#059669]" strokeWidth={2.5} />
+            </div>
+          </div>
+          <div>
+            <div className="text-[#1E2939] font-bold text-[24px] mb-2">Password Updated!</div>
+            <div className="text-[#6A7282] text-[15px] leading-relaxed">Your password has been changed successfully.</div>
+          </div>
+          <button onClick={onSuccess} className="w-full dt-btn-primary text-white rounded-2xl py-4 font-bold text-[15px] uppercase">
+            Back to Profile
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[#F2F5FB] flex flex-col" style={{ height: '100%' }}>
+      <div className="bg-[#1E2D4D] dt-safe-top flex items-center gap-3 px-5 py-4 shadow-lg shrink-0">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <div className="text-white font-bold text-xl">Reset Password</div>
+          <div className="text-white/60 text-xs">Change your account password</div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-5 space-y-5 pb-8">
+          <div className="bg-[#EAF1FE] rounded-2xl px-4 py-3 flex items-start gap-3">
+            <Info size={16} className="text-[#1360D2] shrink-0 mt-0.5" />
+            <p className="text-[#1360D2] text-[13px] leading-relaxed">Your new password must be at least 6 characters long.</p>
+          </div>
+
+          {/* Current password */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#364153] mb-2">Current Password</label>
+            <div className="relative">
+              <Key size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1360D2]" />
+              <input
+                value={current} onChange={e => setCurrent(e.target.value)}
+                type={showCurrent ? 'text' : 'password'}
+                placeholder="Enter current password"
+                className="w-full bg-white border border-[#E0EAFB] focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/10 rounded-2xl pl-11 pr-12 py-4 text-[14px] text-[#1E2939] placeholder:text-[#99A1AF] outline-none transition-all shadow-sm"
+              />
+              <button onClick={() => setShowCurrent(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6A7282] hover:text-[#1360D2]">
+                {showCurrent ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+          </div>
+
+          {/* New password */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#364153] mb-2">New Password</label>
+            <div className="relative">
+              <Key size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1360D2]" />
+              <input
+                value={newPw} onChange={e => setNewPw(e.target.value)}
+                type={showNew ? 'text' : 'password'}
+                placeholder="Enter new password"
+                className="w-full bg-white border border-[#E0EAFB] focus:border-[#1360D2] focus:ring-4 focus:ring-[#1360D2]/10 rounded-2xl pl-11 pr-12 py-4 text-[14px] text-[#1E2939] placeholder:text-[#99A1AF] outline-none transition-all shadow-sm"
+              />
+              <button onClick={() => setShowNew(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6A7282] hover:text-[#1360D2]">
+                {showNew ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            {newPw.length > 0 && newPw.length < 6 && (
+              <p className="text-red-500 text-[12px] mt-1.5 ml-1">At least 6 characters required</p>
+            )}
+          </div>
+
+          {/* Confirm password */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#364153] mb-2">Confirm New Password</label>
+            <div className="relative">
+              <Key size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1360D2]" />
+              <input
+                value={confirm} onChange={e => setConfirm(e.target.value)}
+                type={showConfirm ? 'text' : 'password'}
+                placeholder="Re-enter new password"
+                className={`w-full bg-white border focus:ring-4 rounded-2xl pl-11 pr-12 py-4 text-[14px] text-[#1E2939] placeholder:text-[#99A1AF] outline-none transition-all shadow-sm ${
+                  mismatch ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : 'border-[#E0EAFB] focus:border-[#1360D2] focus:ring-[#1360D2]/10'
+                }`}
+              />
+              <button onClick={() => setShowConfirm(s => !s)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6A7282] hover:text-[#1360D2]">
+                {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            {mismatch && <p className="text-red-500 text-[12px] mt-1.5 ml-1">Passwords do not match</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="shrink-0 px-5 pb-6 pt-3 bg-[#F2F5FB] border-t border-gray-100">
+        <button
+          onClick={() => canSubmit && setDone(true)}
+          disabled={!canSubmit}
+          className={`w-full rounded-2xl py-4 font-bold text-[15px] uppercase transition-all ${
+            canSubmit ? 'dt-btn-primary text-white' : 'bg-[#e5e7eb] text-[#99a1af] cursor-not-allowed'
+          }`}
+        >
+          Update Password
+        </button>
+      </div>
+    </div>
   );
 }
 
