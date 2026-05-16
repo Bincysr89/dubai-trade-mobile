@@ -1679,50 +1679,90 @@ function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, o
   { onTab: (t: Screen) => void; biometric: boolean; setBiometric: (v: boolean) => void; onSignOut: () => void;
     onResetPassword: () => void; onChangeCustomer: () => void; onNotificationsSettings: () => void; onRenewNow: () => void }) {
   return (
-    <div className="bg-gradient-to-b from-[#F8F9FB] to-[#EEF2F7] min-h-full flex flex-col">
-      <div className="bg-[#0E1B3D] dt-safe-top pb-20 px-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-48 h-48 bg-[#478CF7]/10 rounded-full blur-3xl" />
-        <div className="relative flex flex-col items-center text-white">
-          <div className="w-20 h-20 rounded-2xl border-4 border-white/20 bg-white/10 flex items-center justify-center text-3xl font-bold">A</div>
-          <div className="mt-3 text-xl font-bold">Ahmed</div>
-          <div className="text-sm text-white/80">Ahmed.rashid@company.ae</div>
+    <div className="min-h-full flex flex-col" style={{ background: '#F0F4FA' }}>
+
+      {/* Hero header */}
+      <div className="relative dt-safe-top px-5 pt-3 pb-24 text-white"
+        style={{ background: 'linear-gradient(160deg, #0A1A3D 0%, #0E1B3D 50%, #14306E 100%)' }}>
+        <div className="absolute -top-24 -right-16 w-[320px] h-[320px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: '#1360D2' }} />
+        <div className="absolute -bottom-20 -left-10 w-[260px] h-[260px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: '#478CF7' }} />
+        <div className="relative flex items-center justify-between mb-1">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Dubai Trade</div>
+            <div className="text-[18px] font-bold leading-tight">My Profile</div>
+          </div>
+          <button className="w-9 h-9 rounded-full bg-white/10 backdrop-blur border border-white/15 flex items-center justify-center hover:bg-white/20">
+            <Bell size={17} />
+          </button>
         </div>
       </div>
-      <div className="px-5 -mt-12 space-y-4 relative z-10">
-        <div className="bg-white rounded-2xl p-4 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-b from-[#0E47A6] via-[#1360D2] to-[#2950E5] flex items-center justify-center text-white">
-              <Award size={22} />
+
+      {/* Floating avatar card */}
+      <div className="px-5 -mt-16 relative z-20">
+        <div className="bg-white rounded-2xl border border-[#E0EAFB] shadow-[0_18px_36px_-18px_rgba(14,27,61,0.28)] p-5">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#0E47A6] to-[#2950E5] flex items-center justify-center text-white text-2xl font-bold shadow-lg flex-shrink-0">
+              A
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 text-[11px] font-bold tracking-wider text-[#27314B] uppercase">
-                <span className="w-2 h-2 rounded-full bg-[#14C9A9]" /> Annual Subscription
+            <div className="flex-1 min-w-0">
+              <div className="text-[17px] font-bold text-[#0E1B3D]">Ahmed Rashid</div>
+              <div className="text-[13px] text-[#6A7282] truncate">Ahmed.rashid@company.ae</div>
+              <div className="mt-1.5 inline-flex items-center gap-1.5 bg-[#EAF1FE] rounded-full px-2.5 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#14C9A9]" />
+                <span className="text-[11px] font-bold text-[#1360D2] uppercase tracking-wide">Active</span>
               </div>
-              <div className="text-[#0E1B3D] font-medium">Expiring in 25 days</div>
             </div>
           </div>
-          <button onClick={onRenewNow} className="w-full mt-3 bg-[#0E1B3D] text-white py-2.5 rounded-lg text-sm font-bold">RENEW NOW</button>
-        </div>
 
-        <div className="bg-gradient-to-b from-[#FAFBFC] to-[#F5F7FA] border border-gray-200 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold tracking-wider text-[#7F8A9F] uppercase">Customer</div>
-            <div className="text-[#27314B] font-bold text-sm">M0042-CLEARING AGENT-MAERSK...</div>
+          {/* Subscription bar */}
+          <div className="mt-4 pt-4 border-t border-[#EAF0FA] flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#EAF1FE] flex items-center justify-center">
+                <Award size={18} className="text-[#1360D2]" />
+              </div>
+              <div>
+                <div className="text-[11px] text-[#6A7282] uppercase tracking-wide font-semibold">Annual Subscription</div>
+                <div className="text-[13px] font-bold text-[#E07B3A]">Expiring in 25 days</div>
+              </div>
+            </div>
+            <button onClick={onRenewNow}
+              className="bg-[#0E1B3D] text-white text-[11px] font-bold uppercase px-3 py-1.5 rounded-lg tracking-wide">
+              Renew
+            </button>
           </div>
-          <button onClick={onChangeCustomer} className="text-[#1360D2] font-bold text-xs">CHANGE</button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-5 pt-4 pb-24 space-y-4">
+
+        {/* Customer */}
+        <div className="bg-white rounded-2xl border border-[#EAF0FA] shadow-[0_4px_12px_-6px_rgba(14,27,61,0.08)] p-4 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-[#EAF1FE] flex items-center justify-center flex-shrink-0">
+            <Building2 size={20} className="text-[#1360D2]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-semibold tracking-wider text-[#99A1AF] uppercase">Customer</div>
+            <div className="text-[#1E2939] font-bold text-[13px] truncate">M0042-CLEARING AGENT-MAERSK...</div>
+          </div>
+          <button onClick={onChangeCustomer}
+            className="text-[#1360D2] font-bold text-[12px] bg-[#EAF1FE] px-3 py-1.5 rounded-lg flex-shrink-0">
+            CHANGE
+          </button>
         </div>
 
+        {/* Quick actions */}
         <div>
-          <div className="text-sm font-semibold text-[#2D3750] mb-2">Quick Actions</div>
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-4 py-4 flex items-center justify-between">
+          <div className="text-[12px] font-bold text-[#99A1AF] uppercase tracking-wider mb-2 px-1">Quick Actions</div>
+          <div className="bg-white rounded-2xl border border-[#EAF0FA] shadow-[0_4px_12px_-6px_rgba(14,27,61,0.08)] overflow-hidden">
+            <div className="px-4 py-3.5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center text-[#1360D2]">
-                  <Fingerprint size={22} />
+                <div className="w-10 h-10 rounded-xl bg-[#EAF1FE] flex items-center justify-center">
+                  <Fingerprint size={20} className="text-[#1360D2]" />
                 </div>
                 <div>
-                  <div className="font-bold text-[#0E1B3D]">Biometric Login</div>
-                  <div className="text-xs text-gray-500">Use fingerprint to login</div>
+                  <div className="font-bold text-[14px] text-[#1E2939]">Biometric Login</div>
+                  <div className="text-[12px] text-[#6A7282]">Use fingerprint to login</div>
                 </div>
               </div>
               <Toggle on={biometric} onChange={setBiometric} />
@@ -1730,32 +1770,37 @@ function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, o
           </div>
         </div>
 
+        {/* Settings */}
         <div>
-          <div className="text-sm font-semibold text-[#0E1B3D] mb-2">Settings</div>
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="text-[12px] font-bold text-[#99A1AF] uppercase tracking-wider mb-2 px-1">Settings</div>
+          <div className="bg-white rounded-2xl border border-[#EAF0FA] shadow-[0_4px_12px_-6px_rgba(14,27,61,0.08)] overflow-hidden">
             {[
               { icon: Key, label: 'Reset Password', onClick: onResetPassword },
-              { icon: Info, label: 'About Dubai Trade' },
-              { icon: Shield, label: 'Privacy & Security' },
               { icon: Bell, label: 'Notifications', onClick: onNotificationsSettings },
+              { icon: Shield, label: 'Privacy & Security' },
+              { icon: Info, label: 'About Dubai Trade' },
             ].map((row, i, arr) => (
               <button key={row.label} onClick={row.onClick}
-                className={`w-full flex items-center justify-between px-4 py-3 ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                className={`w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#F8FAFF] transition-colors ${i < arr.length - 1 ? 'border-b border-[#EAF0FA]' : ''}`}>
                 <div className="flex items-center gap-3">
-                  <row.icon size={18} className="text-[#0E1B3D]" />
-                  <span className="font-bold text-sm text-[#0E1B3D]">{row.label}</span>
+                  <div className="w-10 h-10 rounded-xl bg-[#EAF1FE] flex items-center justify-center">
+                    <row.icon size={18} className="text-[#1360D2]" />
+                  </div>
+                  <span className="font-bold text-[14px] text-[#1E2939]">{row.label}</span>
                 </div>
-                <ChevronRight size={16} className="text-gray-500" />
+                <ChevronRight size={16} className="text-[#C7D5EA]" />
               </button>
             ))}
           </div>
         </div>
 
+        {/* Sign out */}
         <button onClick={onSignOut}
-          className="w-full bg-red-50 text-red-600 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2">
-          <LogOut size={18} /> SIGN OUT
+          className="w-full bg-white border border-[#FECACA] text-[#DC2626] py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-[0_4px_12px_-6px_rgba(220,38,38,0.15)]">
+          <LogOut size={18} /> Sign Out
         </button>
       </div>
+
       <BottomNav active="profile" onTab={onTab} />
     </div>
   );
