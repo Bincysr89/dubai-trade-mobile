@@ -450,106 +450,82 @@ export default function App() {
 /* ---------- 0. SPLASH ---------- */
 function SplashScreen({ onDone }: { onDone: () => void }) {
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState<'logo' | 'tagline' | 'done'>('logo');
+  const [visible, setVisible] = useState(false);
+  const [versionVisible, setVersionVisible] = useState(false);
 
   useEffect(() => {
-    // Phase 1: logo appears (600ms), then tagline (400ms), then progress bar fills (1600ms)
-    const t1 = setTimeout(() => setPhase('tagline'), 700);
+    const t1 = setTimeout(() => setVisible(true), 80);
+    const t2 = setTimeout(() => setVersionVisible(true), 600);
     let p = 0;
-    const t2 = setTimeout(() => {
-      const interval = setInterval(() => {
-        p += 1.4;
+    const t3 = setTimeout(() => {
+      const iv = setInterval(() => {
+        p += 1.25;
         setProgress(Math.min(p, 100));
-        if (p >= 100) {
-          clearInterval(interval);
-          setPhase('done');
-          setTimeout(onDone, 350);
-        }
-      }, 20);
-    }, 1100);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+        if (p >= 100) { clearInterval(iv); setTimeout(onDone, 300); }
+      }, 22);
+    }, 900);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
   return (
     <div
       onClick={onDone}
-      className="fixed inset-0 flex flex-col items-center justify-center select-none"
-      style={{ background: 'linear-gradient(160deg, #060F24 0%, #0B1530 45%, #0E1B3D 100%)' }}
+      className="fixed inset-0 flex flex-col items-center justify-center select-none overflow-hidden"
+      style={{ background: 'linear-gradient(175deg, #07112B 0%, #0B1A3A 55%, #0E2050 100%)' }}
     >
-      {/* Background blobs */}
-      <div className="absolute top-0 right-0 w-[280px] h-[280px] rounded-full opacity-20 blur-3xl pointer-events-none"
-        style={{ background: '#1360D2' }} />
-      <div className="absolute bottom-0 left-0 w-[220px] h-[220px] rounded-full opacity-15 blur-3xl pointer-events-none"
-        style={{ background: '#478CF7' }} />
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] h-[320px] rounded-full opacity-10 blur-3xl pointer-events-none"
-        style={{ background: '#2950E5' }} />
+      {/* Radial glow centred behind logo */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[340px] h-[340px] rounded-full blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(19,96,210,0.28) 0%, transparent 70%)' }} />
+      </div>
 
-      {/* Logo card */}
+      {/* Logo + version */}
       <div
-        className="flex flex-col items-center gap-6 transition-all duration-700"
+        className="flex flex-col items-center gap-8"
         style={{
-          opacity: phase === 'logo' || phase === 'tagline' || phase === 'done' ? 1 : 0,
-          transform: phase === 'logo' || phase === 'tagline' || phase === 'done' ? 'scale(1) translateY(0)' : 'scale(0.82) translateY(24px)',
-          transitionTimingFunction: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.94)',
+          transition: 'opacity 600ms cubic-bezier(0.22,0.61,0.36,1), transform 600ms cubic-bezier(0.22,0.61,0.36,1)',
         }}
       >
-        {/* Logo glow ring */}
-        <div className="relative flex items-center justify-center">
-          <div className="absolute w-[160px] h-[160px] rounded-full opacity-30 blur-2xl animate-pulse"
-            style={{ background: '#1360D2' }} />
-          <div className="relative w-[130px] h-[130px] rounded-[32px] flex items-center justify-center shadow-[0_0_60px_rgba(19,96,210,0.4)]"
-            style={{ background: 'linear-gradient(145deg, #1360D2 0%, #2950E5 100%)' }}>
-            {/* Icon-only portion of the logo SVG — the circular mark */}
-            <svg width="78" height="54" viewBox="45 0 60 61" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <mask id="sm0" style={{ maskType: 'luminance' } as React.CSSProperties} maskUnits="userSpaceOnUse" x="45" y="0" width="60" height="61">
-                <path d="M104.847 0.809814H45.1533V60.5036H104.847V0.809814Z" fill="white"/>
-              </mask>
-              <g mask="url(#sm0)">
-                <path d="M73.8266 23.7862H81.1777L78.3296 30.9063H71.017C71.017 30.9063 64.2433 48.3027 63.0117 51.1122C61.7416 53.9218 64.7436 55.6923 67.1299 55.8462C79.0609 57.1548 90.4146 48.1486 92.4545 35.7173C94.2634 24.7099 88.2594 14.7416 78.6376 11.6627L73.8266 23.7862Z" fill="white"/>
-                <path d="M45.1533 30.6759C45.1533 31.0994 45.1533 31.5227 45.1918 31.9076C45.8461 17.3594 57.8156 5.77468 72.5177 5.77468C87.6432 5.77468 99.8822 18.0137 99.8822 33.1392C99.8822 47.8413 88.2975 59.8109 73.7494 60.4651C74.1727 60.4651 74.5961 60.5036 74.981 60.5036C91.4535 60.5036 104.847 47.1486 104.847 30.6375C104.847 14.1649 91.492 0.809814 75.0194 0.809814C58.5084 0.809814 45.1533 14.1649 45.1533 30.6759Z" fill="white"/>
-              </g>
-            </svg>
-          </div>
-        </div>
+        {/* Full Dubai Trade vertical logo — white */}
+        <img
+          src={dubaiTradeLogo}
+          alt="Dubai Trade"
+          style={{ width: 220, filter: 'brightness(0) invert(1)', opacity: 0.96 }}
+        />
 
-        {/* Wordmark */}
-        <div className="flex flex-col items-center gap-1">
-          <img
-            src={dubaiTradeLogo}
-            alt="Dubai Trade"
-            style={{ width: 180, filter: 'brightness(0) invert(1)' }}
-          />
-          {/* Version badge */}
-          <div
-            className="mt-3 transition-all duration-500"
-            style={{
-              opacity: phase === 'tagline' || phase === 'done' ? 1 : 0,
-              transform: phase === 'tagline' || phase === 'done' ? 'translateY(0)' : 'translateY(8px)',
-            }}
-          >
-            <span className="inline-flex items-center gap-2 bg-white/10 border border-white/20 backdrop-blur rounded-full px-4 py-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#14C9A9] animate-pulse" />
-              <span className="text-white/90 text-[13px] font-semibold tracking-widest uppercase">Version 2.0</span>
-            </span>
-          </div>
+        {/* Version pill */}
+        <div
+          style={{
+            opacity: versionVisible ? 1 : 0,
+            transform: versionVisible ? 'translateY(0)' : 'translateY(10px)',
+            transition: 'opacity 500ms ease, transform 500ms ease',
+          }}
+        >
+          <span className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-semibold tracking-[0.12em] uppercase"
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.85)' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#14C9A9]" style={{ boxShadow: '0 0 6px #14C9A9' }} />
+            Version 2.0
+          </span>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="absolute bottom-20 left-10 right-10">
-        <div className="h-[2px] rounded-full bg-white/10 overflow-hidden">
+      {/* Progress bar + tap hint */}
+      <div className="absolute bottom-16 left-12 right-12 flex flex-col items-center gap-3">
+        <div className="w-full h-[2px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <div
-            className="h-full rounded-full transition-none"
+            className="h-full rounded-full"
             style={{
               width: `${progress}%`,
-              background: 'linear-gradient(90deg, #478CF7, #1360D2)',
-              transition: 'width 20ms linear',
+              background: 'linear-gradient(90deg, #4E90F8, #1360D2)',
+              transition: 'width 22ms linear',
             }}
           />
         </div>
-        <div className="mt-3 text-center text-white/30 text-[11px] tracking-wider uppercase">
-          Tap anywhere to skip
-        </div>
+        <span className="text-[11px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.22)' }}>
+          Tap to skip
+        </span>
       </div>
     </div>
   );
