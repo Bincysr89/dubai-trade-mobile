@@ -7183,23 +7183,102 @@ function TlucPayments({ onBack }: { onBack: () => void }) {
 
       {/* BRN details flyout — rendered after wizard so it stacks on top */}
       {brnFlyoutFor && (
-        <div className="absolute inset-0 z-[60]">
-          <BottomSheet title={`BRN details · ${brnFlyoutFor.dpwRef}`} onClose={() => setBrnFlyoutFor(null)}>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-              <BrnField label="Agent"            value={brnFlyoutFor.details.agent} />
-              <BrnField label="Line"             value={brnFlyoutFor.details.line} />
-              <BrnField label="Instruction Type" value={brnFlyoutFor.details.instructionType} full />
-              <BrnField label="Destination Port" value={brnFlyoutFor.details.destinationPort} />
-              <BrnField label="Discharge Port"   value={brnFlyoutFor.details.dischargePort} />
-              <BrnField label="Rotation/Vessel"  value={brnFlyoutFor.details.rotationVessel} />
-              <BrnField label="Expiry Date"      value={brnFlyoutFor.expiryDate} />
-              <BrnField label="Load Cut Off"     value={brnFlyoutFor.details.loadCutOffDate} />
-              <BrnField label="Receive Terminal" value={brnFlyoutFor.details.receiveTerminal} />
-              <BrnField label="Stuffing"         value={brnFlyoutFor.details.stuffingLocation} />
-              <BrnField label="Shipper"          value={brnFlyoutFor.shipper} />
-              <BrnField label="Haulier"          value={brnFlyoutFor.details.haulier} full />
+        <div className="absolute inset-0 z-[60] bg-[#0E1B3D]/70 flex items-end"
+          onClick={() => setBrnFlyoutFor(null)}>
+          <div className="bg-[#F4F7FE] w-full rounded-t-3xl max-h-[92%] flex flex-col shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Drag handle */}
+            <div className="pt-3 pb-1 flex justify-center shrink-0">
+              <div className="w-10 h-1 rounded-full bg-[#D1D9E8]" />
             </div>
-          </BottomSheet>
+
+            {/* Rich header */}
+            <div className="relative overflow-hidden shrink-0 mx-4 mt-2 rounded-2xl text-white"
+              style={{ background: 'linear-gradient(135deg, #0E1B3D 0%, #14306E 55%, #2950E5 100%)' }}>
+              <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full opacity-20 blur-2xl" style={{ background: '#6FA0FF' }} />
+              <div className="absolute -bottom-6 -left-4 w-28 h-28 rounded-full opacity-15 blur-2xl" style={{ background: '#2950E5' }} />
+              <div className="relative px-5 pt-4 pb-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/60 mb-1">BRN Details</div>
+                    <div className="text-[22px] font-bold tracking-tight">DPW Ref {brnFlyoutFor.dpwRef}</div>
+                    <div className="text-[12px] text-white/70 mt-0.5">Agent Ref · {brnFlyoutFor.agentRef}</div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <button onClick={() => setBrnFlyoutFor(null)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(255,255,255,0.12)' }}>
+                      <X size={15} className="text-white" />
+                    </button>
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                      brnFlyoutFor.status === 'Unpaid'
+                        ? 'bg-red-500/25 text-red-200 border border-red-400/30'
+                        : 'bg-amber-400/20 text-amber-200 border border-amber-400/30'}`}>
+                      {brnFlyoutFor.status}
+                    </span>
+                  </div>
+                </div>
+                {/* Key highlights row */}
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="text-[9px] uppercase tracking-wider text-white/50 font-bold mb-0.5">BRN Date</div>
+                    <div className="text-[12.5px] font-semibold text-white">{brnFlyoutFor.brnDate}</div>
+                  </div>
+                  <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="text-[9px] uppercase tracking-wider text-white/50 font-bold mb-0.5">Expiry Date</div>
+                    <div className="text-[12.5px] font-semibold text-white">{brnFlyoutFor.expiryDate}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="overflow-y-auto px-4 pt-4 pb-8 space-y-3">
+
+              {/* Shipper & Haulier */}
+              <div className="bg-white rounded-2xl p-4 border border-[#E0EAFB] shadow-sm space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#0E47A6]">Parties</div>
+                <BrnRow label="Shipper" value={brnFlyoutFor.shipper} icon={<Ship size={14} className="text-[#1360D2]" />} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <BrnRow label="Haulier" value={brnFlyoutFor.details.haulier} icon={<Truck size={14} className="text-[#1360D2]" />} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <BrnRow label="Agent" value={brnFlyoutFor.details.agent} icon={<User size={14} className="text-[#1360D2]" />} />
+              </div>
+
+              {/* Shipping info */}
+              <div className="bg-white rounded-2xl p-4 border border-[#E0EAFB] shadow-sm space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#0E47A6]">Shipping Info</div>
+                <BrnRow label="Line" value={brnFlyoutFor.details.line} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <BrnRow label="Instruction Type" value={brnFlyoutFor.details.instructionType} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <BrnRow label="Rotation / Vessel" value={brnFlyoutFor.details.rotationVessel} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-semibold mb-1">Destination Port</div>
+                    <div className="text-[13px] font-semibold text-[#0E1B3D]">{brnFlyoutFor.details.destinationPort}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-semibold mb-1">Discharge Port</div>
+                    <div className="text-[13px] font-semibold text-[#0E1B3D]">{brnFlyoutFor.details.dischargePort}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Logistics */}
+              <div className="bg-white rounded-2xl p-4 border border-[#E0EAFB] shadow-sm space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#0E47A6]">Logistics</div>
+                <BrnRow label="Load Cut Off" value={brnFlyoutFor.details.loadCutOffDate} icon={<Clock size={14} className="text-[#1360D2]" />} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <BrnRow label="Receive Terminal" value={brnFlyoutFor.details.receiveTerminal} icon={<MapPin size={14} className="text-[#1360D2]" />} />
+                <div className="h-px bg-[#F0F3F9]" />
+                <BrnRow label="Stuffing Location" value={brnFlyoutFor.details.stuffingLocation} icon={<Box size={14} className="text-[#1360D2]" />} />
+              </div>
+
+            </div>
+          </div>
         </div>
       )}
 
@@ -7276,6 +7355,18 @@ function BrnField({ label, value, full }: { label: string; value: string; full?:
     <div className={`min-w-0 ${full ? 'col-span-2' : ''}`}>
       <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">{label}</div>
       <div className="text-[12.5px] font-semibold text-[#33455F] mt-0.5 break-words">{value}</div>
+    </div>
+  );
+}
+
+function BrnRow({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      {icon && <div className="mt-0.5 shrink-0">{icon}</div>}
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wider text-[#6B7280] font-semibold mb-0.5">{label}</div>
+        <div className="text-[13px] font-semibold text-[#0E1B3D] break-words">{value}</div>
+      </div>
     </div>
   );
 }
