@@ -5,7 +5,7 @@ import {
   MapPin, Search, X, User, Key, Info, Shield, FileCheck, LogOut, Award,
   Type, Box, ClipboardList, ArrowRight, Building2, Boxes,
   AlertCircle, Upload, Calendar, Mail, Phone, FileCheck2, CheckCircle2, Plus, Download,
-  Trash2, Copy, Check, Clock, Receipt, Share2, Sun, Moon, Pin,
+  Trash2, Copy, Check, Clock, Receipt, Share2, Sun, Moon, Pin, Sparkles,
 } from 'lucide-react';
 import dubaiTradeLogo from './assets/dubai-trade-logo.svg';
 import uaePassLogoSvg from './assets/uaepass-logo.svg?raw';
@@ -47,6 +47,7 @@ export default function App() {
   const [gatePassOrigin, setGatePassOrigin] = useState<'dashboard'|'cargoMgmt'>('dashboard');
   const [forgotPasswordOrigin, setForgotPasswordOrigin] = useState<'login'|'profile'>('login');
   const [customerProfileOrigin, setCustomerProfileOrigin] = useState<'login'|'profile'>('login');
+  const [splashReturnScreen, setSplashReturnScreen] = useState<Screen>('login');
   const [hasCompletedFirstRun, setHasCompletedFirstRun] = useState(initialScreen !== 'login' && initialScreen !== 'onboarding' && initialScreen !== 'splash');
   const [view, setView] = useState<View>('grid');
   const [showCustomize, setShowCustomize] = useState(initialCustomize);
@@ -102,7 +103,7 @@ export default function App() {
       <div className="phone-scroll">
         <div key={screen} className="dt-screen">
         {screen === 'splash' && (
-          <SplashScreen onDone={() => setScreen('login')} />
+          <SplashScreen onDone={() => setScreen(splashReturnScreen)} />
         )}
         {screen === 'onboarding' && (
           <Onboarding onDone={() => {
@@ -198,7 +199,8 @@ export default function App() {
             onResetPassword={() => setScreen('changePassword')}
             onChangeCustomer={() => { setCustomerProfileOrigin('profile'); setScreen('customerProfile'); }}
             onNotificationsSettings={() => setScreen('notificationsSettings')}
-            onRenewNow={() => setScreen('subscription')} />
+            onRenewNow={() => setScreen('subscription')}
+            onViewSplash={() => { setSplashReturnScreen('profile'); setScreen('splash'); }} />
         )}
         {screen === 'payments' && (
           <Payments onBack={() => setScreen('services')}
@@ -1792,9 +1794,9 @@ function Services({ onTab, onOpenPayments, onOpenCargoMgmt, onAdvanceDeposit, on
 }
 
 /* ---------- 7. PROFILE ---------- */
-function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, onChangeCustomer, onNotificationsSettings, onRenewNow }:
+function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, onChangeCustomer, onNotificationsSettings, onRenewNow, onViewSplash }:
   { onTab: (t: Screen) => void; biometric: boolean; setBiometric: (v: boolean) => void; onSignOut: () => void;
-    onResetPassword: () => void; onChangeCustomer: () => void; onNotificationsSettings: () => void; onRenewNow: () => void }) {
+    onResetPassword: () => void; onChangeCustomer: () => void; onNotificationsSettings: () => void; onRenewNow: () => void; onViewSplash: () => void }) {
   return (
     <div className="min-h-full flex flex-col" style={{ background: '#F0F4FA' }}>
 
@@ -1896,6 +1898,7 @@ function Profile({ onTab, biometric, setBiometric, onSignOut, onResetPassword, o
               { icon: Bell, label: 'Notifications', onClick: onNotificationsSettings },
               { icon: Shield, label: 'Privacy & Security' },
               { icon: Info, label: 'About Dubai Trade' },
+              { icon: Sparkles, label: "What's New in v2.0", onClick: onViewSplash },
             ].map((row, i, arr) => (
               <button key={row.label} onClick={row.onClick}
                 className={`w-full flex items-center justify-between px-4 py-3.5 hover:bg-[#F8FAFF] transition-colors ${i < arr.length - 1 ? 'border-b border-[#EAF0FA]' : ''}`}>
