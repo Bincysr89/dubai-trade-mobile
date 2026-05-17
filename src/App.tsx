@@ -48,6 +48,8 @@ export default function App() {
   const [forgotPasswordOrigin, setForgotPasswordOrigin] = useState<'login'|'profile'>('login');
   const [customerProfileOrigin, setCustomerProfileOrigin] = useState<'login'|'profile'>('login');
   const [splashReturnScreen, setSplashReturnScreen] = useState<Screen>('login');
+  const [splashExiting, setSplashExiting] = useState(false);
+  const suppressNextAnim = React.useRef(false);
   const [hasCompletedFirstRun, setHasCompletedFirstRun] = useState(initialScreen !== 'login' && initialScreen !== 'onboarding' && initialScreen !== 'splash');
   const [view, setView] = useState<View>('grid');
   const [showCustomize, setShowCustomize] = useState(initialCustomize);
@@ -100,15 +102,32 @@ export default function App() {
 
   return (
     <div className="phone-frame">
-      <div className="phone-scroll">
-        <div key={screen} className="dt-screen">
+      <div className="phone-scroll" style={{ position: 'relative', overflow: 'hidden' }}>
+        {/* Login renders underneath splash during its exit — animates in with staggered motion */}
+        {splashExiting && screen === 'splash' && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+            <Login mode={loginMode} fromSplash
+              theme={theme} onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+              onContinue={() => { setPendingDashboardTour(true); setScreen('onboarding'); }}
+              onLoginWithPassword={() => setLoginMode('initial')}
+              onForgot={() => { setForgotPasswordOrigin('login'); setScreen('forgotPassword'); }}
+              onViewSplash={() => { setSplashReturnScreen('login'); setScreen('splash'); }} />
+          </div>
+        )}
+
+        <div key={screen} className="dt-screen"
+          ref={(el) => { if (el && suppressNextAnim.current) { el.style.animation = 'none'; suppressNextAnim.current = false; } }}>
         {screen === 'splash' && (
-          <SplashScreen onDone={() => {
-            const ret = splashReturnScreen;
-            setScreen(ret);
-            // Reset so login doesn't replay the entrance animation next time
-            setTimeout(() => setSplashReturnScreen('login'), 1000);
-          }} />
+          <SplashScreen
+            onExitStart={() => setSplashExiting(true)}
+            onExitEnd={() => {
+              suppressNextAnim.current = true;
+              setScreen(splashReturnScreen);
+              setSplashExiting(false);
+              setTimeout(() => setSplashReturnScreen('login'), 500);
+            }}
+            exitDuration={820}
+          />
         )}
         {screen === 'onboarding' && (
           <Onboarding onDone={() => {
@@ -142,7 +161,6 @@ export default function App() {
             }}
             onLoginWithPassword={() => setLoginMode('initial')}
             onForgot={() => { setForgotPasswordOrigin('login'); setScreen('forgotPassword'); }}
-            fromSplash={splashReturnScreen === 'login'}
             onViewSplash={() => { setSplashReturnScreen('login'); setScreen('splash'); }} />
         )}
         {screen === 'customerProfile' && (
@@ -457,14 +475,17 @@ export default function App() {
 }
 
 /* ---------- 0. SPLASH ---------- */
-function SplashScreen({ onDone }: { onDone: () => void }) {
+function SplashScreen({ onExitStart, onExitEnd, exitDuration = 820 }: {
+  onExitStart: () => void; onExitEnd: () => void; exitDuration?: number;
+}) {
   const [progress, setProgress] = useState(0);
   const [exiting, setExiting] = useState(false);
 
   const exit = React.useCallback(() => {
     setExiting(true);
-    setTimeout(onDone, 680);
-  }, [onDone]);
+    onExitStart();
+    setTimeout(onExitEnd, exitDuration);
+  }, [onExitStart, onExitEnd, exitDuration]);
 
   useEffect(() => {
     let p = 0;
@@ -472,7 +493,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
       const iv = setInterval(() => {
         p += 1.1;
         setProgress(Math.min(p, 100));
-        if (p >= 100) { clearInterval(iv); setTimeout(exit, 300); }
+        if (p >= 100) { clearInterval(iv); setTimeout(exit, 200); }
       }, 24);
     }, 600);
     return () => clearTimeout(t);
@@ -482,80 +503,87 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
     <>
       <style>{`
         @keyframes sp-logo {
-          0%   { opacity:0; transform: scale(0.55) translateY(24px); filter: blur(12px); }
-          70%  { filter: blur(0); }
+          0%   { opacity:0; transform: scale(0.6) translateY(20px); filter: blur(10px); }
+          65%  { filter: blur(0); }
           100% { opacity:1; transform: scale(1) translateY(0); filter: blur(0); }
         }
+        @keyframes sp-logo-exit {
+          from { opacity:1; transform: scale(1) translateY(0); }
+          to   { opacity:0; transform: scale(0.28) translateY(-240px); }
+        }
         @keyframes sp-version {
-          0%   { opacity:0; transform: translateY(14px); }
+          0%   { opacity:0; transform: translateY(12px); }
           100% { opacity:1; transform: translateY(0); }
         }
         @keyframes sp-ring {
-          0%   { opacity:.5; transform: scale(.7); }
+          0%   { opacity:.45; transform: scale(.7); }
           100% { opacity:0; transform: scale(2.4); }
         }
         @keyframes sp-glow {
           0%,100% { opacity:.22; transform: scale(1); }
-          50%      { opacity:.38; transform: scale(1.18); }
+          50%      { opacity:.36; transform: scale(1.15); }
         }
         @keyframes sp-dot {
-          0%,100% { box-shadow:0 0 5px #14C9A9; opacity:1; }
-          50%      { box-shadow:0 0 14px #14C9A9, 0 0 28px #14C9A9; opacity:.7; }
+          0%,100% { box-shadow:0 0 5px #14C9A9; }
+          50%      { box-shadow:0 0 14px #14C9A9, 0 0 28px #14C9A9; }
         }
         @keyframes sp-bar-shimmer {
           0%   { left:-60%; }
           100% { left:120%; }
         }
-        .sp-logo    { animation: sp-logo 850ms cubic-bezier(0.22,0.61,0.36,1) forwards; }
-        .sp-version { animation: sp-version 550ms 820ms ease both; }
-        .sp-ring1   { animation: sp-ring 2.4s 200ms ease-out infinite; }
-        .sp-ring2   { animation: sp-ring 2.4s 900ms ease-out infinite; }
-        .sp-glow    { animation: sp-glow 3.2s ease-in-out infinite; }
-        .sp-dot     { animation: sp-dot 2s ease-in-out infinite; }
-        .sp-shimmer { animation: sp-bar-shimmer 1.6s 1.2s linear infinite; }
+        @keyframes sp-fade-out {
+          from { opacity:1; }
+          to   { opacity:0; }
+        }
+        .sp-logo       { animation: sp-logo 800ms cubic-bezier(0.22,0.61,0.36,1) forwards; }
+        .sp-logo-exit  { animation: sp-logo-exit 520ms cubic-bezier(0.4,0,0.2,1) forwards !important; }
+        .sp-version    { animation: sp-version 500ms 780ms ease both; }
+        .sp-ring1      { animation: sp-ring 2.4s 200ms ease-out infinite; }
+        .sp-ring2      { animation: sp-ring 2.4s 900ms ease-out infinite; }
+        .sp-glow       { animation: sp-glow 3.2s ease-in-out infinite; }
+        .sp-dot        { animation: sp-dot 2s ease-in-out infinite; }
+        .sp-shimmer    { animation: sp-bar-shimmer 1.6s 1.2s linear infinite; }
+        .sp-fade-quick { animation: sp-fade-out 200ms ease-in forwards !important; }
+        .sp-fade-mid   { animation: sp-fade-out 300ms ease-in forwards !important; }
+        .sp-fade-bg    { animation: sp-fade-out 650ms ease forwards !important; }
       `}</style>
 
+      {/* Outer shell — transparent, just locks pointer events during exit */}
       <div
-        onClick={exit}
-        className="fixed inset-0 flex flex-col items-center justify-center select-none overflow-hidden"
-        style={{ background: 'linear-gradient(175deg, #060E24 0%, #0A1733 50%, #0E2050 100%)' }}
+        onClick={exiting ? undefined : exit}
+        className="fixed inset-0 z-50 select-none overflow-hidden"
+        style={{ pointerEvents: exiting ? 'none' : 'auto' }}
       >
-        {/* Pulsing radial glow — fades out on exit */}
-        <div className="sp-glow absolute inset-0 flex items-center justify-center pointer-events-none"
-          style={{ opacity: exiting ? 0 : undefined, transition: exiting ? 'opacity 300ms' : undefined }}>
+        {/* Background — fades last so login shows through gradually */}
+        <div className={`absolute inset-0 ${exiting ? 'sp-fade-bg' : ''}`}
+          style={{ background: 'linear-gradient(175deg, #060E24 0%, #0A1733 50%, #0E2050 100%)' }} />
+
+        {/* Radial glow — fades quickly */}
+        <div className={`sp-glow absolute inset-0 flex items-center justify-center pointer-events-none ${exiting ? 'sp-fade-mid' : ''}`}>
           <div className="w-[380px] h-[380px] rounded-full blur-[80px]"
             style={{ background: 'radial-gradient(circle, rgba(19,96,210,0.5) 0%, transparent 65%)' }} />
         </div>
 
-        {/* Expanding rings — fade out on exit */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
-          style={{ marginTop: '-40px', opacity: exiting ? 0 : undefined, transition: exiting ? 'opacity 200ms' : undefined }}>
+        {/* Expanding rings — fade quickly */}
+        <div className={`absolute inset-0 flex items-center justify-center pointer-events-none ${exiting ? 'sp-fade-quick' : ''}`}
+          style={{ marginTop: '-40px' }}>
           <div className="sp-ring1 absolute w-[220px] h-[220px] rounded-full"
             style={{ border: '1.5px solid rgba(78,144,248,0.35)' }} />
           <div className="sp-ring2 absolute w-[220px] h-[220px] rounded-full"
             style={{ border: '1.5px solid rgba(78,144,248,0.25)' }} />
         </div>
 
-        {/* Logo — slides to top-left on exit (mimics moving into login header) */}
-        <div
-          className="sp-logo flex flex-col items-center gap-7"
-          style={{
-            opacity: 0,
-            ...(exiting ? {
-              animation: 'none',
-              opacity: 1,
-              transform: 'translateY(-310px) translateX(-95px) scale(0.22)',
-              transition: 'transform 650ms cubic-bezier(0.22,0.61,0.36,1), opacity 100ms 550ms',
-              transformOrigin: 'center center',
-            } : {}),
-          }}
-        >
-          <img src={dubaiTradeLogo} alt="Dubai Trade"
-            style={{ width: 230, filter: 'brightness(0) invert(1)' }} />
+        {/* Center content: logo + version */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {/* Logo — moves up and shrinks on exit */}
+          <div className={`flex items-center justify-center sp-logo ${exiting ? 'sp-logo-exit' : ''}`}
+            style={{ opacity: 0 }}>
+            <img src={dubaiTradeLogo} alt="Dubai Trade"
+              style={{ width: 230, filter: 'brightness(0) invert(1)' }} />
+          </div>
 
-          {/* Version pill — fades out on exit */}
-          <div className="sp-version"
-            style={{ opacity: exiting ? 0 : undefined, transition: exiting ? 'opacity 150ms' : undefined }}>
+          {/* Version pill — fades quickly on exit */}
+          <div className={`sp-version mt-7 ${exiting ? 'sp-fade-quick' : ''}`}>
             <span className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-[12.5px] font-semibold tracking-[0.14em] uppercase"
               style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)', color: 'rgba(255,255,255,0.82)' }}>
               <span className="sp-dot w-1.5 h-1.5 rounded-full bg-[#14C9A9]" />
@@ -564,9 +592,8 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
           </div>
         </div>
 
-        {/* Progress bar — fades out on exit */}
-        <div className="absolute bottom-14 left-12 right-12 flex flex-col items-center gap-3"
-          style={{ opacity: exiting ? 0 : undefined, transition: exiting ? 'opacity 200ms' : undefined }}>
+        {/* Progress bar — fades quickly on exit */}
+        <div className={`absolute bottom-14 left-12 right-12 flex flex-col items-center gap-3 ${exiting ? 'sp-fade-quick' : ''}`}>
           <div className="relative w-full h-[2px] rounded-full overflow-hidden"
             style={{ background: 'rgba(255,255,255,0.07)' }}>
             <div className="h-full rounded-full"
@@ -642,15 +669,21 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const canSubmit = username.trim().length > 0 || password.length > 0;
-  const splashEntrance = fromSplash
-    ? { animation: 'sp-login-in 650ms cubic-bezier(0.22,0.61,0.36,1) both' }
-    : {};
-  // Clear fromSplash flag after mount so returning to login later doesn't re-animate
-  const onViewSplashRef = React.useRef(onViewSplash);
-  useEffect(() => { onViewSplashRef.current = onViewSplash; }, [onViewSplash]);
+
+  const splashEnterStyle = (delay: number, offsetY = 40): React.CSSProperties => fromSplash ? {
+    '--sp-y': `${offsetY}px`,
+    animation: `sp-login-enter 420ms cubic-bezier(0.22,0.61,0.36,1) ${delay}ms both`,
+  } as React.CSSProperties : {};
+
   if (mode === 'touchId') {
     return (
       <div className={`relative h-full min-h-full overflow-hidden ${wrapperCls}`} style={wrapperStyle}>
+        {fromSplash && <style>{`
+          @keyframes sp-login-enter {
+            from { opacity:0; transform: translateY(var(--sp-y, 40px)); }
+            to   { opacity:1; transform: translateY(0); }
+          }
+        `}</style>}
         {isDark ? (
           <>
             <div className="absolute -top-32 -right-32 w-[420px] h-[420px] rounded-full bg-[#1360D2] opacity-30 blur-[110px] pointer-events-none" />
@@ -665,7 +698,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
         )}
 
         {/* Hero — brand mark + tagline */}
-        <div className="relative dt-safe-top px-7 pt-2 pb-8">
+        <div className="relative dt-safe-top px-7 pt-2 pb-8" style={splashEnterStyle(0, 30)}>
           <div className="flex items-center gap-3 mb-6">
             <img src={dubaiTradeLogo} alt="Dubai Trade" className={`h-12 w-auto ${logoCls}`} />
           </div>
@@ -676,7 +709,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
         </div>
 
         {/* Form card */}
-        <div className={`relative mx-5 rounded-[28px] p-6 z-10 ${cardCls}`}>
+        <div className={`relative mx-5 rounded-[28px] p-6 z-10 ${cardCls}`} style={splashEnterStyle(140, 55)}>
           {/* Touch ID hero tile */}
           <button onClick={onContinue}
             className="group w-full flex flex-col items-center justify-center rounded-2xl border-[1.5px] border-[#E0EAFB] bg-gradient-to-b from-[#F4F7FE] to-[#EAF1FE] hover:border-[#1360D2] hover:shadow-[0_12px_24px_-12px_rgba(19,96,210,0.35)] transition-all p-5">
@@ -715,7 +748,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
         </div>
 
         {/* Trust footer */}
-        <div className="relative mt-6 pb-6 px-7 text-center space-y-2.5 z-10">
+        <div className="relative mt-6 pb-6 px-7 text-center space-y-2.5 z-10" style={splashEnterStyle(280, 45)}>
           <div className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${trustCls}`}>
             <Shield size={12} className={shieldIconCls} /> Secured by end-to-end encryption
           </div>
@@ -731,43 +764,34 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
     );
   }
   return (
-    <>
-    {fromSplash && <style>{`
-      @keyframes sp-login-in {
-        0%   { opacity:0; transform: translateY(60px); }
-        100% { opacity:1; transform: translateY(0); }
-      }
-      @keyframes sp-logo-settle {
-        0%   { opacity:0; transform: scale(3.8) translateX(95px) translateY(310px); }
-        60%  { opacity:1; }
-        100% { opacity:1; transform: scale(1) translateX(0) translateY(0); }
-      }
-    `}</style>}
     <div className={`relative h-full min-h-full overflow-hidden ${wrapperCls}`} style={wrapperStyle}>
+      {fromSplash && <style>{`
+        @keyframes sp-login-enter {
+          from { opacity:0; transform: translateY(var(--sp-y, 40px)); }
+          to   { opacity:1; transform: translateY(0); }
+        }
+      `}</style>}
       {isDark ? (
         <>
           <div className="absolute -top-32 -right-32 w-[420px] h-[420px] rounded-full bg-[#1360D2] opacity-30 blur-[110px] pointer-events-none" />
           <div className="absolute top-20 -left-32 w-[380px] h-[380px] rounded-full bg-[#478CF7] opacity-20 blur-[120px] pointer-events-none" />
           <div className="absolute -bottom-32 right-0 w-[460px] h-[460px] rounded-full bg-[#1360D2] opacity-15 blur-[140px] pointer-events-none" />
         </>
-      ) : (
-        null
-      )}
+      ) : null}
 
       {/* Hero — brand mark + tagline */}
-      <div className="relative dt-safe-top px-7 pt-2 pb-8">
+      <div className="relative dt-safe-top px-7 pt-2 pb-8" style={splashEnterStyle(0, 30)}>
         <div className="flex items-center gap-3 mb-7">
-          <img src={dubaiTradeLogo} alt="Dubai Trade" className={`h-12 w-auto ${logoCls}`}
-            style={fromSplash ? { animation: 'sp-logo-settle 650ms cubic-bezier(0.22,0.61,0.36,1) both', transformOrigin: 'left center' } : {}} />
+          <img src={dubaiTradeLogo} alt="Dubai Trade" className={`h-12 w-auto ${logoCls}`} />
         </div>
-        <div className="text-[28px] font-bold leading-[34px] tracking-tight" style={splashEntrance}>Welcome back.</div>
-        <div className={`text-[15px] mt-2 max-w-[280px] leading-snug ${subtitleCls}`} style={splashEntrance}>
+        <div className="text-[28px] font-bold leading-[34px] tracking-tight">Welcome back.</div>
+        <div className={`text-[15px] mt-2 max-w-[280px] leading-snug ${subtitleCls}`}>
           Sign in to manage your trade operations — anywhere, anytime.
         </div>
       </div>
 
       {/* Form card */}
-      <div className={`relative mx-5 rounded-[28px] p-6 z-10 ${cardCls}`} style={{ ...splashEntrance, animationDelay: fromSplash ? '80ms' : undefined }}>
+      <div className={`relative mx-5 rounded-[28px] p-6 z-10 ${cardCls}`} style={splashEnterStyle(140, 55)}>
         {/* Inputs — label inside the field */}
         <div className="space-y-3">
           <div className="relative">
@@ -828,8 +852,7 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
       </div>
 
       {/* Trust signals & terms */}
-      <div className="relative mt-6 pb-6 px-7 text-center space-y-2.5 z-10"
-        style={{ ...splashEntrance, animationDelay: fromSplash ? '140ms' : undefined }}>
+      <div className="relative mt-6 pb-6 px-7 text-center space-y-2.5 z-10" style={splashEnterStyle(280, 45)}>
         <div className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${trustCls}`}>
           <Shield size={12} className={shieldIconCls} /> Secured by end-to-end encryption
         </div>
@@ -842,7 +865,6 @@ function Login({ onContinue, mode, theme = 'dark', onToggleTheme, onForgot, onLo
         {ThemeToggle}
       </div>
     </div>
-    </>
   );
 }
 
