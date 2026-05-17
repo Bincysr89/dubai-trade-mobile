@@ -7282,15 +7282,122 @@ function TlucPayments({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {billingFlyoutFor && committed[billingFlyoutFor.dpwRef] && (
-        <div className="absolute inset-0 z-[60]">
-          <BottomSheet title={`Billing calculation · ${billingFlyoutFor.dpwRef}`} onClose={() => setBillingFlyoutFor(null)}>
-            <BillingCalculationTable
-              lines={committed[billingFlyoutFor.dpwRef].lines}
-              total={committed[billingFlyoutFor.dpwRef].total} />
-          </BottomSheet>
-        </div>
-      )}
+      {billingFlyoutFor && committed[billingFlyoutFor.dpwRef] && (() => {
+        const rec = billingFlyoutFor;
+        const { lines, total, payingQty } = committed[rec.dpwRef];
+        return (
+          <div className="absolute inset-0 z-[60] bg-[#0E1B3D]/70 flex items-end"
+            onClick={() => setBillingFlyoutFor(null)}>
+            <div className="bg-[#F4F7FE] w-full rounded-t-3xl max-h-[92%] flex flex-col shadow-2xl"
+              onClick={e => e.stopPropagation()}>
+
+              {/* Drag handle */}
+              <div className="pt-3 pb-1 flex justify-center shrink-0">
+                <div className="w-10 h-1 rounded-full bg-[#D1D9E8]" />
+              </div>
+
+              {/* Rich header */}
+              <div className="relative overflow-hidden shrink-0 mx-4 mt-2 rounded-2xl text-white"
+                style={{ background: 'linear-gradient(135deg, #0E1B3D 0%, #0E47A6 60%, #1360D2 100%)' }}>
+                <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full opacity-20 blur-2xl" style={{ background: '#6FA0FF' }} />
+                <div className="absolute -bottom-4 -left-4 w-24 h-24 rounded-full opacity-15 blur-2xl" style={{ background: '#2950E5' }} />
+                <div className="relative px-5 pt-4 pb-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/60 mb-1">Billing Calculation</div>
+                      <div className="text-[20px] font-bold tracking-tight">DPW Ref {rec.dpwRef}</div>
+                      <div className="text-[12px] text-white/65 mt-0.5">{rec.shipper}</div>
+                    </div>
+                    <button onClick={() => setBillingFlyoutFor(null)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center mt-0.5 shrink-0"
+                      style={{ background: 'rgba(255,255,255,0.12)' }}>
+                      <X size={15} className="text-white" />
+                    </button>
+                  </div>
+                  {/* Total + qty summary */}
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="col-span-1 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div className="text-[9px] uppercase tracking-wider text-white/50 font-bold mb-0.5">Grand Total</div>
+                      <div className="text-[15px] font-bold text-white">AED {total.toLocaleString('en-AE', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    <div className="col-span-1 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div className="text-[9px] uppercase tracking-wider text-white/50 font-bold mb-0.5">Containers</div>
+                      <div className="text-[15px] font-bold text-white">{payingQty} <span className="text-[11px] font-medium text-white/70">to pay</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line items */}
+              <div className="overflow-y-auto px-4 pt-4 pb-8 space-y-2.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#0E47A6] px-1 mb-1">
+                  Charge breakdown · {lines.length} line{lines.length !== 1 ? 's' : ''}
+                </div>
+                {lines.map((l, i) => {
+                  const dashIdx = l.tariff.indexOf(' - ');
+                  const code = dashIdx > -1 ? l.tariff.slice(0, dashIdx) : l.tariff.split(' ')[0];
+                  const desc = dashIdx > -1 ? l.tariff.slice(dashIdx + 3) : l.tariff.split(' ').slice(1).join(' ');
+                  return (
+                    <div key={i} className="bg-white rounded-2xl border border-[#E0EAFB] shadow-sm overflow-hidden">
+                      {/* Line header */}
+                      <div className="px-4 pt-3.5 pb-3 border-b border-[#F0F4FA]">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md text-[#1360D2] bg-[#EAF1FE] border border-[#D0E0F8] tracking-wider max-w-[140px] truncate">
+                            {code}
+                          </span>
+                          <span className="shrink-0 text-[14px] font-bold text-[#0E47A6]">
+                            AED {l.total.toLocaleString('en-AE')}
+                          </span>
+                        </div>
+                        <span className="text-[12.5px] font-semibold text-[#0E1B3D] leading-tight">{desc || l.tariff}</span>
+                      </div>
+                      {/* Detail grid */}
+                      <div className="px-4 py-3 grid grid-cols-3 gap-y-2.5 gap-x-2">
+                        <div>
+                          <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-semibold">Stuffing</div>
+                          <div className="text-[12px] font-semibold text-[#0E1B3D] mt-0.5">{l.stuffing}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-semibold">Type</div>
+                          <div className="text-[12px] font-semibold text-[#0E1B3D] mt-0.5">{l.contrType}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-semibold">Qty</div>
+                          <div className="text-[12px] font-semibold text-[#0E1B3D] mt-0.5">{l.noOfContrs}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-semibold">Rate</div>
+                          <div className="text-[12px] font-semibold text-[#0E1B3D] mt-0.5">AED {l.rate}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-semibold">Gross</div>
+                          <div className="text-[12px] font-semibold text-[#0E1B3D] mt-0.5">AED {l.gross}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] uppercase tracking-wider text-[#6B7280] font-semibold">VAT</div>
+                          <div className="text-[12px] font-semibold text-[#0E1B3D] mt-0.5">{l.vatPct}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Grand total card */}
+                <div className="rounded-2xl text-white px-4 py-4 flex items-center justify-between mt-1"
+                  style={{ background: 'linear-gradient(135deg, #0E47A6, #1360D2)' }}>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-white/65 font-bold">Grand Total</div>
+                    <div className="text-[11px] text-white/55 mt-0.5">{lines.length} charges · {payingQty} containers</div>
+                  </div>
+                  <div className="text-[20px] font-bold tracking-tight">
+                    AED {total.toLocaleString('en-AE', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Custom date range bottom sheet */}
       {showCustomSheet && (
