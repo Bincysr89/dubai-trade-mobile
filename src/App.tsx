@@ -450,84 +450,113 @@ export default function App() {
 /* ---------- 0. SPLASH ---------- */
 function SplashScreen({ onDone }: { onDone: () => void }) {
   const [progress, setProgress] = useState(0);
-  const [visible, setVisible] = useState(false);
-  const [versionVisible, setVersionVisible] = useState(false);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setVisible(true), 80);
-    const t2 = setTimeout(() => setVersionVisible(true), 600);
     let p = 0;
-    const t3 = setTimeout(() => {
+    const t = setTimeout(() => {
       const iv = setInterval(() => {
-        p += 1.25;
+        p += 1.1;
         setProgress(Math.min(p, 100));
-        if (p >= 100) { clearInterval(iv); setTimeout(onDone, 300); }
-      }, 22);
-    }, 900);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+        if (p >= 100) { clearInterval(iv); setTimeout(onDone, 400); }
+      }, 24);
+    }, 600);
+    return () => clearTimeout(t);
   }, []);
 
   return (
-    <div
-      onClick={onDone}
-      className="fixed inset-0 flex flex-col items-center justify-center select-none overflow-hidden"
-      style={{ background: 'linear-gradient(175deg, #07112B 0%, #0B1A3A 55%, #0E2050 100%)' }}
-    >
-      {/* Radial glow centred behind logo */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[340px] h-[340px] rounded-full blur-3xl"
-          style={{ background: 'radial-gradient(circle, rgba(19,96,210,0.28) 0%, transparent 70%)' }} />
-      </div>
+    <>
+      <style>{`
+        @keyframes sp-logo {
+          0%   { opacity:0; transform: scale(0.55) translateY(24px); filter: blur(12px); }
+          70%  { filter: blur(0); }
+          100% { opacity:1; transform: scale(1) translateY(0); filter: blur(0); }
+        }
+        @keyframes sp-version {
+          0%   { opacity:0; transform: translateY(14px); }
+          100% { opacity:1; transform: translateY(0); }
+        }
+        @keyframes sp-ring {
+          0%   { opacity:.5; transform: scale(.7); }
+          100% { opacity:0; transform: scale(2.4); }
+        }
+        @keyframes sp-glow {
+          0%,100% { opacity:.22; transform: scale(1); }
+          50%      { opacity:.38; transform: scale(1.18); }
+        }
+        @keyframes sp-dot {
+          0%,100% { box-shadow:0 0 5px #14C9A9; opacity:1; }
+          50%      { box-shadow:0 0 14px #14C9A9, 0 0 28px #14C9A9; opacity:.7; }
+        }
+        @keyframes sp-bar-shimmer {
+          0%   { left:-60%; }
+          100% { left:120%; }
+        }
+        .sp-logo    { animation: sp-logo 850ms cubic-bezier(0.22,0.61,0.36,1) forwards; }
+        .sp-version { animation: sp-version 550ms 820ms ease both; }
+        .sp-ring1   { animation: sp-ring 2.4s 200ms ease-out infinite; }
+        .sp-ring2   { animation: sp-ring 2.4s 900ms ease-out infinite; }
+        .sp-glow    { animation: sp-glow 3.2s ease-in-out infinite; }
+        .sp-dot     { animation: sp-dot 2s ease-in-out infinite; }
+        .sp-shimmer { animation: sp-bar-shimmer 1.6s 1.2s linear infinite; }
+      `}</style>
 
-      {/* Logo + version */}
       <div
-        className="flex flex-col items-center gap-8"
-        style={{
-          opacity: visible ? 1 : 0,
-          transform: visible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.94)',
-          transition: 'opacity 600ms cubic-bezier(0.22,0.61,0.36,1), transform 600ms cubic-bezier(0.22,0.61,0.36,1)',
-        }}
+        onClick={onDone}
+        className="fixed inset-0 flex flex-col items-center justify-center select-none overflow-hidden"
+        style={{ background: 'linear-gradient(175deg, #060E24 0%, #0A1733 50%, #0E2050 100%)' }}
       >
-        {/* Full Dubai Trade vertical logo — white */}
-        <img
-          src={dubaiTradeLogo}
-          alt="Dubai Trade"
-          style={{ width: 220, filter: 'brightness(0) invert(1)', opacity: 0.96 }}
-        />
+        {/* Pulsing radial glow */}
+        <div className="sp-glow absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-[380px] h-[380px] rounded-full blur-[80px]"
+            style={{ background: 'radial-gradient(circle, rgba(19,96,210,0.5) 0%, transparent 65%)' }} />
+        </div>
 
-        {/* Version pill */}
-        <div
-          style={{
-            opacity: versionVisible ? 1 : 0,
-            transform: versionVisible ? 'translateY(0)' : 'translateY(10px)',
-            transition: 'opacity 500ms ease, transform 500ms ease',
-          }}
-        >
-          <span className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-semibold tracking-[0.12em] uppercase"
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.85)' }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#14C9A9]" style={{ boxShadow: '0 0 6px #14C9A9' }} />
-            Version 2.0
+        {/* Expanding rings */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ marginTop: '-40px' }}>
+          <div className="sp-ring1 absolute w-[220px] h-[220px] rounded-full"
+            style={{ border: '1.5px solid rgba(78,144,248,0.35)' }} />
+          <div className="sp-ring2 absolute w-[220px] h-[220px] rounded-full"
+            style={{ border: '1.5px solid rgba(78,144,248,0.25)' }} />
+        </div>
+
+        {/* Logo */}
+        <div className="sp-logo flex flex-col items-center gap-7" style={{ opacity: 0 }}>
+          <img
+            src={dubaiTradeLogo}
+            alt="Dubai Trade"
+            style={{ width: 230, filter: 'brightness(0) invert(1)' }}
+          />
+
+          {/* Version pill */}
+          <div className="sp-version">
+            <span
+              className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-[12.5px] font-semibold tracking-[0.14em] uppercase"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.13)', color: 'rgba(255,255,255,0.82)' }}
+            >
+              <span className="sp-dot w-1.5 h-1.5 rounded-full bg-[#14C9A9]" />
+              Version 2.0
+            </span>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="absolute bottom-14 left-12 right-12 flex flex-col items-center gap-3">
+          <div className="relative w-full h-[2px] rounded-full overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.07)' }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #4E90F8, #2950E5)', transition: 'width 24ms linear' }}
+            />
+            {/* shimmer sweep */}
+            <div className="sp-shimmer absolute top-0 h-full w-[40%] pointer-events-none"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)' }} />
+          </div>
+          <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color: 'rgba(255,255,255,0.18)' }}>
+            Tap to skip
           </span>
         </div>
       </div>
-
-      {/* Progress bar + tap hint */}
-      <div className="absolute bottom-16 left-12 right-12 flex flex-col items-center gap-3">
-        <div className="w-full h-[2px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: `${progress}%`,
-              background: 'linear-gradient(90deg, #4E90F8, #1360D2)',
-              transition: 'width 22ms linear',
-            }}
-          />
-        </div>
-        <span className="text-[11px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.22)' }}>
-          Tap to skip
-        </span>
-      </div>
-    </div>
+    </>
   );
 }
 
