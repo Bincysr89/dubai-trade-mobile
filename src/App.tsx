@@ -1200,7 +1200,7 @@ function Dashboard({ view, setView, prepaidBalance, hasPrepaidCard, onOpenSettin
 
             {/* Custom Declaration */}
             <div data-tour="declaration">
-              <SectionHead title="Custom Declaration" subtitle="Customs status" action="TRACK" onAction={onCustomsTrack} />
+              <SectionHead title="Customs Declaration" subtitle="Customs status" action="TRACK" onAction={onCustomsTrack} />
               <StatusGrid stats={[
                 { n: 5,  l: 'Nearing Expiry', tone: 'rose'   },
                 { n: 12, l: 'Submitted',      tone: 'indigo' },
@@ -1647,7 +1647,7 @@ function PaymentCard({ icon: Icon, amount, label, count, unit, onClick }: any) {
       <div className="flex-1 min-w-0">
         <div className="font-bold text-[#27314B] text-[15px] truncate">
           {isCount
-            ? <><span>{count}</span> <span className="text-[11px] font-semibold text-[#7F8A9F]">{unit}</span></>
+            ? <><span>{count}</span> <span className="text-[11px] font-semibold text-[#27314B]">{unit}</span></>
             : <><Dh /> {amount}</>}
         </div>
         <div className="text-[10px] text-[#7F8A9F] font-medium truncate">{label}</div>
@@ -1667,7 +1667,7 @@ function PaymentRow({ icon: Icon, amount, label, count, unit, onClick }: any) {
       <div className="flex-1">
         <div className="font-bold text-[#27314B] text-[15px]">
           {isCount
-            ? <><span>{count}</span> <span className="text-[12px] font-semibold text-[#7F8A9F]">{unit}</span></>
+            ? <><span>{count}</span> <span className="text-[12px] font-semibold text-[#27314B]">{unit}</span></>
             : <><Dh /> {amount}</>}
         </div>
         <div className="text-[11px] text-[#7F8A9F] font-medium">{label}</div>
