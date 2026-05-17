@@ -999,7 +999,7 @@ function Accessibility({ fontSize, setFontSize, a11y, setA11y, theme, onToggleTh
   ];
   const currentPx = sizes.find(s => s.label === fontSize)?.sample ?? 16;
   return (
-    <div className="bg-[#F4F7FE] min-h-full pb-10">
+    <div className="bg-[#F4F7FE] h-full overflow-y-auto pb-10">
       <DarkHeader title="Accessibility Settings" onBack={onBack} />
 
       <div className="px-5 pt-5 space-y-4">
